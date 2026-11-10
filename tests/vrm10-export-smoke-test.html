@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aster VRM 1.0 Export Smoke Test</title>
+<style>
+body{font:16px system-ui,sans-serif;max-width:760px;margin:32px auto;padding:0 16px;background:#101522;color:#edf2ff}
+button{padding:12px 16px;border:0;border-radius:10px;background:#8bb8ff;color:#101522;font-weight:700}
+pre{white-space:pre-wrap;background:#1b2638;padding:14px;border-radius:10px}
+small{color:#b9c6dc}
+</style>
+</head>
+<body>
+<h1>Aster VRM 1.0 — smoke test</h1>
+<p>This page builds a tiny synthetic humanoid scene, exports the VRMC_vrm core extension, then reads the result back through Three-vrm.</p>
+<p><small>Test fixture only. It is not a PMX converter and does not test skinning, textures, MToon, expressions or SpringBone.</small></p>
+<button id="run">Run export + read-back test</button>
+<pre id="log">Ready.</pre>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { exportVrm10 } from '../src/vrm/three-vrm-exporter.js';
+
+const log = document.querySelector('#log');
+function bone(name, y=0) {
+  const b = new THREE.Bone();
+  b.name = name;
+  b.position.y = y;
+  return b;
+}
+function makeFixture() {
+  const scene = new THREE.Scene();
+  const root = new THREE.Group();
+  root.name = 'AsterSmokeTestAvatar';
+  scene.add(root);
+  const humanoid = {};
+  const add = (name, parent, y=0) => {
+    const b = bone(name, y);
+    parent.add(b);
+    humanoid[name] = b;
+    return b;
+  };
+  const hips = add('hips', root, 1);
+  const spine = add('spine', hips, .25);
+  const head = add('head', spine, .7);
+  const lUpperArm = add('leftUpperArm', spine, .35);
+  const lLowerArm = add('leftLowerArm', lUpperArm, -.25);
+  add('leftHand', lLowerArm, -.25);
+  const rUpperArm = add('rightUpperArm', spine, .35);
+  const rLowerArm = add('rightLowerArm', rUpperArm, -.25);
+  add('rightHand', rLowerArm, -.25);
+  const lUpperLeg = add('leftUpperLeg', hips, -.2);
+  const lLowerLeg = add('leftLowerLeg', lUpperLeg, -.45);
+  add('leftFoot', lLowerLeg, -.45);
+  const rUpperLeg = add('rightUpperLeg', hips, -.2);
+  const rLowerLeg = add('rightLowerLeg', rUpperLeg, -.45);
+  add('rightFoot', rLowerLeg, -.45);
+
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(.18, .8, 4, 8),
+    new THREE.MeshStandardMaterial({color: 0x8bb8ff, roughness: 1})
+  );
+  body.name = 'SmokeTestBody';
+  body.position.y = 1.2;
+  root.add(body);
+  return {scene, humanoid};
+}
+
+document.querySelector('#run').addEventListener('click', async () => {
+  log.textContent = 'Exporting…';
+  try {
+    const {scene, humanoid} = makeFixture();
+    const result = await exportVrm10(scene, {
+      humanoid,
+      meta: {
+        name: 'Aster VRM 1.0 Smoke Test',
+        authors: ['Aster PMX2VRM'],
+        licenseUrl: 'https://vrm.dev/licenses/1.0/'
+      }
+    });
+    log.textContent = JSON.stringify(result.report, null, 2) + '\n\nPASS: Three-vrm loaded the generated file as VRM 1.0.';
+    const url = URL.createObjectURL(result.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Aster-VRM10-SmokeTest.vrm';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (error) {
+    console.error(error);
+    log.textContent = 'FAIL: ' + (error?.stack || error);
+  }
+});
+</script>
+</body>
+</html>
