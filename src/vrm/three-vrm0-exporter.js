@@ -429,6 +429,7 @@ export async function exportVrm0(scene, options = {}) {
     },
     firstPerson,
     materialProperties,
+    secondaryAnimation: { boneGroups: [], colliderGroups: [] },
   };
   if (blendShapeMaster) vrm.blendShapeMaster = blendShapeMaster;
 
@@ -456,7 +457,7 @@ export async function exportVrm0(scene, options = {}) {
       humanoidBones: humanoid.humanBones.length,
       blendShapeGroups: blendShapeMaster?.blendShapeGroups.length || 0,
       thumbnailTextureIndex,
-      note: 'VRM 0.x metadata, humanoid, first-person and materialProperties (MToon or Unlit) are serialized. Secondary animation remains unfinished.',
+      note: 'VRM 0.x metadata, humanoid, first-person, materialProperties (MToon or Unlit), and an empty secondaryAnimation container are serialized. Spring bone groups and collider groups are not yet generated.',
     },
   };
 }
