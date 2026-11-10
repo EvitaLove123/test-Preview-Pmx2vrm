@@ -27,6 +27,45 @@ const VALID_MODIFICATION = new Set([
   'prohibited', 'allowModification', 'allowModificationRedistribution',
 ]);
 
+function hexToLinearRgb(hex) {
+  const value = String(hex || '#b8a2cf').replace('#','');
+  const rgb = [0,2,4].map(i => parseInt(value.slice(i,i+2),16) / 255);
+  return rgb.map(c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+}
+function applyMaterialStyle(json, style = {}) {
+  const mode = style.mode === 'unlit' ? 'unlit' : 'mtoon';
+  const shade = hexToLinearRgb(style.shadeColor);
+  const toony = Math.max(0, Math.min(1, Number(style.shadingToonyFactor ?? 0.92)));
+  const shift = Number.isFinite(Number(style.shadingShiftFactor)) ? Number(style.shadingShiftFactor) : -0.04;
+  const used = new Set(json.extensionsUsed || []);
+  (json.materials || []).forEach(material => {
+    material.extensions = material.extensions || {};
+    if (mode === 'unlit') {
+      material.extensions.KHR_materials_unlit = {};
+      used.add('KHR_materials_unlit');
+      delete material.extensions.VRMC_materials_mtoon;
+    } else {
+      material.extensions.VRMC_materials_mtoon = {
+        specVersion: '1.0',
+        shadeColorFactor: shade,
+        shadingShiftFactor: shift,
+        shadingToonyFactor: toony,
+        giEqualizationFactor: 0.9,
+        parametricRimColorFactor: [0.12, 0.09, 0.18],
+        parametricRimFresnelPowerFactor: 5.0,
+        parametricRimLiftFactor: 0.0,
+        rimLightingMixFactor: 0.7,
+        outlineWidthMode: 'none',
+        outlineWidthFactor: 0.0
+      };
+      used.add('VRMC_materials_mtoon');
+      delete material.extensions.KHR_materials_unlit;
+    }
+    if (!Object.keys(material.extensions).length) delete material.extensions;
+  });
+  json.extensionsUsed = Array.from(used);
+}
+
 function assertText(value, label) {
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(label + ' is required.');
@@ -214,6 +253,7 @@ export async function exportVrm10(scene, options = {}) {
 
   if (!(baseGlb instanceof ArrayBuffer)) throw new Error('GLTFExporter did not return binary GLB data.');
   const { json, chunks } = readGlb(baseGlb);
+  applyMaterialStyle(json, options.materialStyle);
   const humanoid = resolveHumanoidNodes(scene, json, options.humanoid);
 
   json.extensions = json.extensions || {};
@@ -243,7 +283,7 @@ export async function exportVrm10(scene, options = {}) {
       meshes: (json.meshes || []).length,
       skins: (json.skins || []).length,
       extensions: json.extensionsUsed,
-      note: 'Core VRM 1.0 only: MToon, expressions and SpringBone are not serialized in this phase.',
+      note: 'VRM 1.0 core with material style extension (MToon or KHR_materials_unlit); expressions and SpringBone are not serialized in this phase.',
     },
   };
 }
