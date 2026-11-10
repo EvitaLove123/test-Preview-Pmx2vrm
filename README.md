@@ -1,6 +1,6 @@
 # Aster PMX2VRM Workshop — Test Preview
 
-Android-first browser prototype for PMX inspection and experimental VRM export using **Three.js + three-vrm**. No Unity or UniVRM runtime is used in this preview.
+Android-first browser prototype for PMX inspection and experimental VRM export using **Three.js + three-vrm**. This preview uses only browser-based Three.js and three-vrm modules.
 
 ## Open the preview
 https://aster-pmx2vrm-preview.vercel.app/
