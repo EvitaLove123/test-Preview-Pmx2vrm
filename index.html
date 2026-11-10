@@ -63,6 +63,8 @@ ul{padding-left:21px}.done{color:#23633b}
 <div class="map-tools">
 <button id="autoMap" type="button">Auto map bones</button>
 <button id="clearMap" class="secondary" type="button">Clear mapping</button>
+<button id="autoTPose" type="button" disabled>Auto T-pose</button>
+<button id="resetPose" class="secondary" type="button" disabled>Reset pose</button>
 </div>
 <div class="map-summary" id="mapSummary">Load a PMX model to inspect and map its humanoid bones.</div>
 <div class="mapping-list" id="mappingList"></div>
@@ -141,6 +143,7 @@ const viewport = $('viewport'), empty = $('empty');
 let renderer, scene, camera, controls, currentModel = null, skeletonHelper = null;
 let textureUrls = [], textureMap = new Map(), showBones = false;
 let sourceBones = [], humanoidMapping = {};
+let originalPose = new Map(), poseApplied = false;
 let sourceModelFileName = '';
 let exportBusy = false;
 
@@ -154,8 +157,10 @@ function initViewer() {
   scene.background = new THREE.Color(0xeaf0f8);
   camera = new THREE.PerspectiveCamera(40, 1, 0.1, 2000);
   camera.position.set(0, 10, 28);
-  renderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // Mobile-friendly rendering: lower GPU cost and avoid rendering at 2x device pixel ratio.
+  renderer = new THREE.WebGLRenderer({antialias:false, alpha:false, powerPreference:'low-power'});
+  const mobilePixelRatio = window.matchMedia('(max-width: 700px)').matches ? 1.25 : 1.5;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobilePixelRatio));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   viewport.appendChild(renderer.domElement);
   controls = new OrbitControls(camera, renderer.domElement);
@@ -174,7 +179,15 @@ function initViewer() {
     camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h, false);
   };
   new ResizeObserver(resize).observe(viewport); resize();
-  renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+  // Cap the live preview at about 30 FPS and pause drawing while Chrome is backgrounded.
+  let lastRenderTime = 0;
+  renderer.setAnimationLoop((time) => {
+    if (document.hidden || time - lastRenderTime < 33) return;
+    lastRenderTime = time;
+    controls.update();
+    renderer.render(scene, camera);
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) lastRenderTime = 0; });
 }
 function clearModel() {
   $('downloadGlb').disabled = true;
@@ -300,6 +313,7 @@ async function renderPmx(buffer, displayName, sourceSize, zipEntries = []) {
     previewRoot.position.set(-modelCenter.x, -modelBounds.min.y, -modelCenter.z);
     currentModel = previewRoot;
     scene.add(currentModel);
+    saveOriginalPose(model);
     skeletonHelper = new THREE.SkeletonHelper(model);
     skeletonHelper.visible = false; currentModel.add(skeletonHelper);
     currentModel.updateMatrixWorld(true);
@@ -515,11 +529,74 @@ const REQUIRED_1X = ['hips','spine','head','leftUpperArm','leftLowerArm','leftHa
 function getRequiredMissing(required) {
   return required.filter(slot => !Number.isInteger(humanoidMapping[slot]) || !sourceBones[humanoidMapping[slot]]);
 }
+function saveOriginalPose(model) {
+  originalPose = new Map();
+  for (const bone of (model?.skeleton?.bones || [])) originalPose.set(bone, bone.quaternion.clone());
+  poseApplied = false;
+  $('autoTPose').textContent = 'Auto T-pose';
+  $('resetPose').disabled = true;
+}
+function restoreOriginalPose() {
+  for (const [bone, quaternion] of originalPose) bone.quaternion.copy(quaternion);
+  if (currentModel) currentModel.updateMatrixWorld(true);
+  if (skeletonHelper?.update) skeletonHelper.update();
+  poseApplied = false;
+  $('autoTPose').textContent = 'Auto T-pose';
+  $('resetPose').disabled = true;
+}
+function rotateBoneTowardWorldDirection(bone, childBone, targetDirection) {
+  if (!bone || !childBone) return false;
+  bone.updateMatrixWorld(true); childBone.updateMatrixWorld(true);
+  const start = bone.getWorldPosition(new THREE.Vector3());
+  const end = childBone.getWorldPosition(new THREE.Vector3());
+  const currentDirection = end.sub(start);
+  if (currentDirection.lengthSq() < 1e-10) return false;
+  currentDirection.normalize();
+  const worldDelta = new THREE.Quaternion().setFromUnitVectors(currentDirection, targetDirection.clone().normalize());
+  const parentWorld = new THREE.Quaternion();
+  if (bone.parent) bone.parent.getWorldQuaternion(parentWorld);
+  const localDelta = parentWorld.clone().invert().multiply(worldDelta).multiply(parentWorld);
+  bone.quaternion.premultiply(localDelta);
+  bone.updateMatrixWorld(true);
+  return true;
+}
+function applyAutoTPose() {
+  const roles = ['hips','leftUpperArm','leftLowerArm','leftHand','rightUpperArm','rightLowerArm','rightHand'];
+  const missing = roles.filter(role => !Number.isInteger(humanoidMapping[role]) || !sourceBones[humanoidMapping[role]]);
+  if (missing.length) {
+    $('mapSummary').textContent = 'Auto T-pose needs these mapped bones: ' + missing.join(', ');
+    return;
+  }
+  restoreOriginalPose();
+  const hips = sourceBones[humanoidMapping.hips];
+  const hipPosition = hips.getWorldPosition(new THREE.Vector3());
+  for (const side of ['left','right']) {
+    const upper = sourceBones[humanoidMapping[side+'UpperArm']];
+    const lower = sourceBones[humanoidMapping[side+'LowerArm']];
+    const hand = sourceBones[humanoidMapping[side+'Hand']];
+    const handPosition = hand.getWorldPosition(new THREE.Vector3());
+    const sign = handPosition.x >= hipPosition.x ? 1 : -1;
+    const horizontal = new THREE.Vector3(sign, 0, 0);
+    rotateBoneTowardWorldDirection(upper, lower, horizontal);
+    rotateBoneTowardWorldDirection(lower, hand, horizontal);
+  }
+  if (currentModel) currentModel.updateMatrixWorld(true);
+  if (skeletonHelper?.update) skeletonHelper.update();
+  poseApplied = true;
+  $('autoTPose').textContent = 'Auto T-pose ✓';
+  $('resetPose').disabled = false;
+  $('mapSummary').textContent = 'Auto T-pose applied to both arm chains. Check the shoulders, elbows and wrists before exporting; the original pose can be restored with Reset pose.';
+}
+$('autoTPose').addEventListener('click', applyAutoTPose);
+$('resetPose').addEventListener('click', restoreOriginalPose);
 function updateExportButtons() {
   const missing0 = getRequiredMissing(REQUIRED_0X);
   const missing1 = getRequiredMissing(REQUIRED_1X);
   $('exportVrm0').disabled = !currentModel || exportBusy || missing0.length > 0;
   $('exportVrm1').disabled = !currentModel || exportBusy || missing1.length > 0;
+  const poseRolesReady = ['leftUpperArm','leftLowerArm','leftHand','rightUpperArm','rightLowerArm','rightHand'].every(role => Number.isInteger(humanoidMapping[role]) && sourceBones[humanoidMapping[role]]);
+  $('autoTPose').disabled = !currentModel || !poseRolesReady;
+  $('resetPose').disabled = !poseApplied;
   if (currentModel) {
     const notes = [];
     if (missing0.length) notes.push('0.x missing: '+missing0.join(', '));
