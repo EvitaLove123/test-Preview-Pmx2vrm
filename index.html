@@ -69,8 +69,20 @@ ul{padding-left:21px}.done{color:#23633b}
 <div class="map-summary" id="mapSummary">Load a PMX model to inspect and map its humanoid bones.</div>
 <div class="mapping-list" id="mappingList"></div>
 </section>
+<section class="card" id="materialCard">
+<h2>4. Material &amp; shading</h2>
+<p class="note">Choose the avatar material style. The selected style is applied to the preview and embedded in VRM exports where supported.</p>
+<div class="grid">
+<div class="field"><label for="materialMode">Material mode</label><select id="materialMode"><option value="mtoon">MToon — anime cel shading</option><option value="unlit">Material Unlit — no lighting</option></select></div>
+<div class="field"><label for="shadingPreset">Shading preset</label><select id="shadingPreset"><option value="klee">Klee Kaboom Style</option><option value="classic">Classic Anime</option><option value="soft">Soft Anime</option></select></div>
+<div class="field"><label for="shadeColor">Shadow color</label><input id="shadeColor" type="color" value="#b8a2cf"></div>
+<div class="field"><label for="toony">Toon shadow strength</label><input id="toony" type="range" min="0" max="1" step="0.01" value="0.92"></div>
+</div>
+<div class="map-tools" style="margin-top:10px"><button id="applyMaterialStyle" type="button" disabled>Apply material style</button></div>
+<div class="map-summary" id="materialStatus">Load a PMX model to apply MToon or Unlit shading.</div>
+</section>
 <section class="card" id="metadataCard">
-<h2>4. Model information &amp; permissions</h2>
+<h2>5. Model information &amp; permissions</h2>
 <p class="note">Edit metadata embedded directly by the browser-based VRM 0.x / 1.0 exporters. These fields do not alter the original PMX.</p>
 <div class="grid">
 <div class="field"><label for="metaName">Model name</label><input id="metaName" type="text" placeholder="Model name"></div>
@@ -91,7 +103,7 @@ ul{padding-left:21px}.done{color:#23633b}
 <div class="map-summary" id="metadataSummary">Metadata will be embedded by the browser exporter.</div>
 </section>
 <section class="card" id="exportCard">
-<h2>5. Download VRM</h2>
+<h2>6. Download VRM</h2>
 <p class="note">Export runs locally in this browser. Complete the required Humanoid mapping first. VRM 0.x and VRM 1.0 are generated independently.</p>
 <div class="map-tools">
 <button id="exportVrm0" type="button" disabled>Download VRM 0.x</button>
@@ -102,7 +114,7 @@ ul{padding-left:21px}.done{color:#23633b}
 
 
 <section class="card">
-<h2>6. Conversion pipeline</h2>
+<h2>7. Conversion pipeline</h2>
 <ul>
 <li class="done">PMX parser integration — experimental browser prototype</li>
 <li class="done">ZIP package import — first prototype</li>
@@ -146,6 +158,77 @@ let sourceBones = [], humanoidMapping = {};
 let originalPose = new Map(), poseApplied = false;
 let sourceModelFileName = '';
 let exportBusy = false;
+const originalMaterialFor = new WeakMap();
+let toonGradient = null;
+
+function materialStyleOptions() {
+  const mode = $('materialMode')?.value || 'mtoon';
+  const preset = $('shadingPreset')?.value || 'klee';
+  const shadeColor = $('shadeColor')?.value || '#b8a2cf';
+  const toony = Number($('toony')?.value ?? 0.92);
+  const presetValues = {
+    klee: { shift: -0.04, toony: Math.max(toony, 0.88), shade: shadeColor },
+    classic: { shift: 0.0, toony, shade: shadeColor },
+    soft: { shift: 0.08, toony: Math.min(toony, 0.62), shade: shadeColor }
+  };
+  const selected = presetValues[preset] || presetValues.klee;
+  return { mode, preset, shadeColor: selected.shade, shadingShiftFactor: selected.shift, shadingToonyFactor: selected.toony };
+}
+function getToonGradient() {
+  if (toonGradient) return toonGradient;
+  const data = new Uint8Array([70,70,70,255, 150,150,150,255, 255,255,255,255]);
+  toonGradient = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
+  toonGradient.magFilter = THREE.NearestFilter;
+  toonGradient.minFilter = THREE.NearestFilter;
+  toonGradient.generateMipmaps = false;
+  toonGradient.needsUpdate = true;
+  return toonGradient;
+}
+function createPreviewMaterial(source, style) {
+  const base = originalMaterialFor.get(source) || source;
+  const common = {
+    name: base.name || 'PMX Material',
+    color: base.color ? base.color.clone() : new THREE.Color(0xffffff),
+    map: base.map || null,
+    alphaMap: base.alphaMap || null,
+    transparent: !!base.transparent,
+    opacity: base.opacity == null ? 1 : base.opacity,
+    side: base.side == null ? THREE.DoubleSide : base.side,
+    vertexColors: !!base.vertexColors,
+    depthWrite: base.depthWrite
+  };
+  let next;
+  if (style.mode === 'unlit') {
+    next = new THREE.MeshBasicMaterial(common);
+  } else {
+    next = new THREE.MeshToonMaterial({ ...common, gradientMap: getToonGradient() });
+  }
+  if (base.emissive && next.emissive) next.emissive.copy(base.emissive);
+  next.userData.asterMaterialStyle = style.mode;
+  originalMaterialFor.set(next, base);
+  return next;
+}
+function applyMaterialStyle() {
+  if (!currentModel) return;
+  const style = materialStyleOptions();
+  let changed = 0;
+  currentModel.traverse(obj => {
+    if (!obj.isMesh || !obj.material) return;
+    const replace = mat => {
+      const base = originalMaterialFor.get(mat) || mat;
+      changed++;
+      return createPreviewMaterial(base, style);
+    };
+    obj.material = Array.isArray(obj.material) ? obj.material.map(replace) : replace(obj.material);
+  });
+  $('materialStatus').textContent = style.mode === 'unlit'
+    ? 'Material Unlit applied to ' + changed + ' material slot(s). Lighting is disabled.'
+    : 'MToon preview applied to ' + changed + ' material slot(s). Preset: ' + style.preset + '. VRM export will embed matching material settings.';
+}
+['materialMode','shadingPreset','shadeColor','toony'].forEach(id => {
+  $(id).addEventListener('change', () => { if (currentModel) applyMaterialStyle(); });
+});
+$('applyMaterialStyle').addEventListener('click', applyMaterialStyle);
 
 function setStatus(message, kind='') {
   state.textContent = message;
@@ -201,6 +284,8 @@ function clearModel() {
     }
   });
   currentModel = null;
+  $('applyMaterialStyle').disabled = true;
+  $('materialStatus').textContent = 'Load a PMX model to apply MToon or Unlit shading.';
   $('exportVrm0').disabled = true;
   $('exportVrm1').disabled = true;
   if (skeletonHelper) { scene.remove(skeletonHelper); skeletonHelper = null; }
@@ -313,6 +398,8 @@ async function renderPmx(buffer, displayName, sourceSize, zipEntries = []) {
     previewRoot.position.set(-modelCenter.x, -modelBounds.min.y, -modelCenter.z);
     currentModel = previewRoot;
     scene.add(currentModel);
+    $('applyMaterialStyle').disabled = false;
+    applyMaterialStyle();
     saveOriginalPose(model);
     skeletonHelper = new THREE.SkeletonHelper(model);
     skeletonHelper.visible = false; currentModel.add(skeletonHelper);
@@ -725,10 +812,11 @@ async function runVrmExport(format) {
       const thumbFile = $('metaThumbnail').files?.[0];
       result = await exportVrm0(prepared.wrapper, {
         humanoid:prepared.humanoid, meta,
+        materialStyle:materialStyleOptions(),
         thumbnail:thumbFile || undefined
       });
     } else {
-      result = await exportVrm10(prepared.wrapper, {humanoid:prepared.humanoid, meta});
+      result = await exportVrm10(prepared.wrapper, {humanoid:prepared.humanoid, meta, materialStyle:materialStyleOptions()});
     }
     const base = (meta.title || meta.name || 'Aster_Model').replace(/[^a-z0-9_-]+/gi,'_');
     downloadBlob(result.blob, base+'_VRM_'+(format === '0.x' ? '0x' : '1.0')+'.vrm');
