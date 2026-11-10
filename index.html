@@ -185,7 +185,7 @@ function getToonGradient() {
   return toonGradient;
 }
 function createPreviewMaterial(source, style) {
-  const base = originalMaterialFor.get(source) || source;
+  const base = (source && originalMaterialFor.get(source)) || source || {};
   const common = {
     name: base.name || 'PMX Material',
     color: base.color ? base.color.clone() : new THREE.Color(0xffffff),
