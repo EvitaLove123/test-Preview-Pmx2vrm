@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f5f7fc">
+<title>Aster PMX2VRM Workshop</title>
+<style>
+:root{color-scheme:light;--bg:#f5f7fc;--panel:#fff;--ink:#1e2a3b;--muted:#68778c;--line:#e3e9f2;--blue:#5479b8;--good:#e8f6ee;--warn:#fff4df;--bad:#ffeded}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+header{padding:15px 18px;background:#fff;border-bottom:1px solid var(--line);font-weight:800;letter-spacing:.06em}
+main{max-width:1000px;margin:22px auto;padding:0 14px 40px}.hero{padding:8px 2px 18px}.hero small{color:var(--blue);font-weight:800;letter-spacing:.14em}.hero h1{font-size:clamp(27px,6vw,42px);line-height:1.1;margin:8px 0}.hero p{color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px;margin:12px 0;box-shadow:0 8px 28px #2439570c}
+.drop{border:2px dashed #aabbd4;border-radius:14px;padding:18px 12px;text-align:center;background:#f9fbff}
+input{max-width:100%;margin-top:10px}.status{display:inline-block;border-radius:99px;background:var(--warn);color:#855b16;padding:5px 10px;font-size:12px;font-weight:800}.status.good{background:var(--good);color:#23633b}.status.bad{background:var(--bad);color:#9b3030}
+button{border:0;border-radius:11px;background:var(--blue);color:white;font-weight:700;padding:11px 15px;margin:10px 6px 0 0;min-height:44px}button.secondary{background:#eaf0f8;color:#304866}
+.note{font-size:13px;color:var(--muted)}#viewport{height:min(62vh,520px);min-height:300px;border-radius:13px;background:linear-gradient(#edf3fc,#e5ebf5);overflow:hidden;position:relative}#viewport canvas{display:block;width:100%;height:100%}.empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;color:var(--muted);pointer-events:none}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{background:#f8faff;border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}.field strong{display:block;font-size:13px}.field span{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.mapping-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.map-row{background:#f8faff;border:1px solid var(--line);border-radius:12px;padding:10px;min-width:0}.map-row label{display:block;font-size:13px;font-weight:800;margin-bottom:6px}.map-row select{width:100%;min-width:0;padding:10px;border:1px solid #d6dfec;border-radius:9px;background:#fff;color:var(--ink);font:inherit}.map-tools{display:flex;flex-wrap:wrap;gap:6px}.map-summary{padding:10px 12px;border-radius:12px;background:#f1f5fb;color:#425873;font-size:13px;margin-top:10px}
+@media(max-width:600px){.mapping-list{grid-template-columns:1fr}}
+ul{padding-left:21px}.done{color:#23633b}
+@media(max-width:600px){.grid{grid-template-columns:1fr}.card{padding:14px}#viewport{min-height:280px}}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","jszip":"https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm","@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js"}}
+</script>
+</head>
+<body>
+<header>✦ ASTER WORKSHOP <span style="font-weight:500;color:#68778c">/ PMX2VRM · MOBILE EDITION</span></header>
+<main>
+<section class="hero"><small>MMD CONVERSION WORKBENCH</small><h1>PMX → VRM 0.x / 1.0</h1><p>Import an MMD PMX model, inspect its 3D appearance, and prepare it for a verified conversion workflow.</p></section>
+<section class="card">
+<h2>1. Import PMX</h2>
+<div class="drop"><strong>Option A — Import a complete ZIP package</strong><br><input id="zip" type="file" accept=".zip,application/zip"><p class="note">Recommended: select a ZIP containing one PMX and its texture folders. The workshop will locate the PMX and prepare texture assets automatically.</p></div>
+<div class="drop" style="margin-top:12px"><strong>Option B — Select a PMX file</strong><br><input id="pmx" type="file" accept=".pmx,application/octet-stream"><p class="note">You can also select a PMX file directly, then add its textures below.</p></div>
+<div class="drop" style="margin-top:12px"><strong>Optional: select texture files separately</strong><br><input id="textures" type="file" accept="image/*,.tga,.bmp,.spa,.sph" multiple><p class="note">Used with direct PMX import when the original texture folder is not available.</p></div>
+<p><span class="status" id="state">Waiting for a PMX file</span></p>
+<div id="viewport"><div class="empty" id="empty">Your 3D model preview will appear here.<br>Choose a PMX file to begin.</div></div>
+<button id="reset" class="secondary" type="button">Reset camera</button><button id="skeleton" class="secondary" type="button" disabled>Show skeleton</button>
+<p class="note">Touch-drag to orbit · Pinch to zoom · Two-finger drag to pan. The preview is local to this browser session.</p>
+<div class="field" style="margin-top:12px">
+<strong>Download 3D Preview (GLB)</strong>
+<p class="note">Load a PMX or ZIP first. When the 3D model appears above, this button becomes available. This downloads a preview GLB, not a VRM avatar.</p>
+<button id="downloadGlb" type="button" disabled>Download Preview GLB</button>
+<div class="map-summary" id="glbStatus">Waiting for a PMX model to load.</div>
+</div>
+</section>
+<section class="card">
+<h2>2. Model inspection</h2>
+<div class="grid">
+<div class="field"><strong>File</strong><span id="fileName">Not loaded</span></div>
+<div class="field"><strong>File size</strong><span id="fileSize">—</span></div>
+<div class="field"><strong>Meshes</strong><span id="meshCount">—</span></div>
+<div class="field"><strong>Materials</strong><span id="materialCount">—</span></div>
+<div class="field"><strong>Skeleton bones</strong><span id="boneCount">—</span></div>
+<div class="field"><strong>Texture files selected</strong><span id="textureCount">0</span></div>
+</div>
+<p class="note" id="details">No model data has been parsed yet.</p>
+</section>
+<section class="card" id="mappingCard">
+<h2>3. Humanoid mapping</h2>
+<p class="note">Map the PMX skeleton to standard VRM Humanoid roles. Original PMX bone names remain unchanged. Finger matching supports Japanese full-width numbering and common L/R prefix/suffix conventions. Ambiguous generic Finger01 names are left unmapped rather than guessed.</p>
+<div class="map-tools">
+<button id="autoMap" type="button">Auto map bones</button>
+<button id="clearMap" class="secondary" type="button">Clear mapping</button>
+</div>
+<div class="map-summary" id="mapSummary">Load a PMX model to inspect and map its humanoid bones.</div>
+<div class="mapping-list" id="mappingList"></div>
+</section>
+<section class="card" id="metadataCard">
+<h2>4. Model information &amp; permissions</h2>
+<p class="note">Edit metadata embedded directly by the browser-based VRM 0.x / 1.0 exporters. These fields do not alter the original PMX.</p>
+<div class="grid">
+<div class="field"><label for="metaName">Model name</label><input id="metaName" type="text" placeholder="Model name"></div>
+<div class="field"><label for="metaVersion">Version</label><input id="metaVersion" type="text" value="1.0" placeholder="1.0"></div>
+<div class="field"><label for="metaAuthor">Author</label><input id="metaAuthor" type="text" placeholder="Author name"></div>
+<div class="field"><label for="metaContact">Contact</label><input id="metaContact" type="text" placeholder="Email or website"></div>
+</div>
+<div class="field" style="margin-top:10px"><label for="metaReference">Reference / Credit URL</label><input id="metaReference" type="text" placeholder="https://..."></div>
+<div class="grid" style="margin-top:10px">
+<div class="field"><label for="metaAllowed">Allowed user</label><select id="metaAllowed"><option value="Everyone">Everyone</option><option value="ExplicitlyLicensedPerson">Only licensed users</option><option value="OnlyAuthor">Only author</option></select></div>
+<div class="field"><label for="metaLicense">License</label><select id="metaLicense"><option value="Redistribution_Prohibited">Redistribution prohibited</option><option value="CC0">CC0</option><option value="CC_BY">CC BY</option><option value="CC_BY_NC">CC BY-NC</option><option value="CC_BY_NC_SA">CC BY-NC-SA</option><option value="Other">Other</option></select></div>
+<div class="field"><label for="metaCommercial">Commercial use</label><select id="metaCommercial"><option value="Disallow">Disallow</option><option value="Allow">Allow</option></select></div>
+<div class="field"><label for="metaViolent">Violent use</label><select id="metaViolent"><option value="Disallow">Disallow</option><option value="Allow">Allow</option></select></div>
+<div class="field"><label for="metaSexual">Sexual use</label><select id="metaSexual"><option value="Disallow">Disallow</option><option value="Allow">Allow</option></select></div>
+<div class="field"><label for="metaOther">Other permissions / URL</label><input id="metaOther" type="text" placeholder="Optional"></div>
+</div>
+<div class="field" style="margin-top:10px"><label for="metaThumbnail">Optional thumbnail (PNG/JPEG, VRM 0.x)</label><input id="metaThumbnail" type="file" accept="image/png,image/jpeg"></div>
+<div class="map-summary" id="metadataSummary">Metadata will be embedded by the browser exporter.</div>
+</section>
+<section class="card" id="exportCard">
+<h2>5. Download VRM</h2>
+<p class="note">Export runs locally in this browser. Complete the required Humanoid mapping first. VRM 0.x and VRM 1.0 are generated independently.</p>
+<div class="map-tools">
+<button id="exportVrm0" type="button" disabled>Download VRM 0.x</button>
+<button id="exportVrm1" type="button" disabled>Download VRM 1.0</button>
+</div>
+<div class="map-summary" id="exportStatus">Load a PMX model, complete its required Humanoid mapping, then choose a VRM format to test.</div>
+</section>
+
+
+<section class="card">
+<h2>6. Conversion pipeline</h2>
+<ul>
+<li class="done">PMX parser integration — experimental browser prototype</li>
+<li class="done">ZIP package import — first prototype</li>
+<li class="done">Interactive 3D preview — first browser prototype</li>
+<li class="done">Humanoid mapping editor — first prototype</li>
+<li class="done">Automatic and manual mapping for core body and finger humanoid bones — improved side-aware aliases</li>
+<li>Browser-native VRM 0.x and VRM 1.0 export buttons — connected to separate Three.js serializers; test on real PMX models</li>
+<li>VRM 0.x metadata, humanoid mapping, first-person, BlendShape and optional thumbnail — implementation scaffold; validator testing pending</li>
+<li>VRM 1.0 metadata and humanoid core — implementation scaffold; validator testing pending</li>
+<li>Safe A-pose to T-pose adjustment — planned</li>
+<li>Expressions, material conversion, SpringBone and colliders — further conversion/validation work required</li>
+</ul>
+<p class="note">This is an early PMX inspection prototype, not a PMX-to-VRM converter. Parsing and preview must still be tested with representative PMX models on Android Chrome.</p>
+</section>
+<section class="card">
+<h2>7. Known limitations</h2>
+<ul>
+<li>ZIP import extracts one PMX plus common texture assets, but texture path matching and legacy formats still need model-by-model validation.</li>
+<li>PMX physics, IK animation playback, toon rendering, and every MMD-specific material feature are not guaranteed in this preview.</li>
+<li>Humanoid mapping includes core body and finger roles. Browser-native VRM export is now wired for testing, but both formats still need independent schema-validator and target-app checks. Expressions, MMD physics conversion, SpringBone authoring, and complete VRM validation remain unfinished.</li>
+</ul>
+</section>
+<p class="note" style="text-align:center">ASTER PMX2VRM WORKSHOP · Android-first · English UI</p>
+</main>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { MMDLoader } from 'three/addons/loaders/MMDLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
+import { exportVrm0 } from './src/vrm/three-vrm0-exporter.js';
+import { exportVrm10 } from './src/vrm/three-vrm-exporter.js';
+import JSZip from 'jszip';
+
+const $ = id => document.getElementById(id);
+const input = $('pmx'), zipInput = $('zip'), textureInput = $('textures'), state = $('state');
+const viewport = $('viewport'), empty = $('empty');
+let renderer, scene, camera, controls, currentModel = null, skeletonHelper = null;
+let textureUrls = [], textureMap = new Map(), showBones = false;
+let sourceBones = [], humanoidMapping = {};
+let sourceModelFileName = '';
+let exportBusy = false;
+
+function setStatus(message, kind='') {
+  state.textContent = message;
+  state.className = 'status' + (kind ? ' ' + kind : '');
+}
+function initViewer() {
+  if (renderer) return;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xeaf0f8);
+  camera = new THREE.PerspectiveCamera(40, 1, 0.1, 2000);
+  camera.position.set(0, 10, 28);
+  renderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  viewport.appendChild(renderer.domElement);
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.target.set(0, 8, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8290a8, 2));
+  const key = new THREE.DirectionalLight(0xffffff, 2.2);
+  key.position.set(8, 18, 12); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.8);
+  fill.position.set(-10, 8, -8); scene.add(fill);
+  const grid = new THREE.GridHelper(40, 40, 0x9eacc1, 0xd2dae7);
+  grid.position.y = 0; scene.add(grid);
+  const axes = new THREE.AxesHelper(5); axes.position.y = 0.02; scene.add(axes);
+  const resize = () => {
+    const w = Math.max(1, viewport.clientWidth), h = Math.max(1, viewport.clientHeight);
+    camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h, false);
+  };
+  new ResizeObserver(resize).observe(viewport); resize();
+  renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+}
+function clearModel() {
+  $('downloadGlb').disabled = true;
+  if (!currentModel) return;
+  scene.remove(currentModel);
+  currentModel.traverse(obj => {
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) for (const m of (Array.isArray(obj.material) ? obj.material : [obj.material])) {
+      if (m.map && !textureUrls.some(u => m.map.image && m.map.image.src === u)) m.map.dispose();
+      m.dispose();
+    }
+  });
+  currentModel = null;
+  $('exportVrm0').disabled = true;
+  $('exportVrm1').disabled = true;
+  if (skeletonHelper) { scene.remove(skeletonHelper); skeletonHelper = null; }
+  $('skeleton').disabled = true;
+}
+function frameModel(object) {
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const height = Math.max(size.y, 1);
+  const width = Math.max(size.x, size.z, 1);
+  const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+  const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
+  const distance = Math.max(
+    height / (2 * Math.tan(verticalFov / 2)),
+    width / (2 * Math.tan(horizontalFov / 2))
+  ) * 1.35;
+  camera.position.set(center.x, center.y + height * 0.12, center.z + distance);
+  camera.near = Math.max(0.01, distance / 1000);
+  camera.far = Math.max(2000, distance * 100);
+  camera.updateProjectionMatrix();
+  controls.target.copy(center);
+  controls.update();
+}
+function normalizePath(s) {
+  try { s = decodeURIComponent(s); } catch(e) {}
+  s = s.split(String.fromCharCode(92)).join('/');
+  while (s.startsWith('./')) s = s.slice(2);
+  return s.toLocaleLowerCase();
+}
+function normalizeName(s) { return normalizePath(s).split('/').pop(); }
+function clearTextureUrls() {
+  textureUrls.forEach(URL.revokeObjectURL);
+  textureUrls = []; textureMap.clear();
+}
+function addTextureBlob(path, blob) {
+  const url = URL.createObjectURL(blob);
+  textureUrls.push(url);
+  textureMap.set(normalizePath(path), url);
+  textureMap.set(normalizeName(path), url);
+}
+textureInput.addEventListener('change', () => {
+  clearTextureUrls();
+  const files = Array.from(textureInput.files || []);
+  for (const file of files) addTextureBlob(file.webkitRelativePath || file.name, file);
+  $('textureCount').textContent = String(files.length);
+});
+$('reset').addEventListener('click', () => { if (currentModel) frameModel(currentModel); });
+$('skeleton').addEventListener('click', () => {
+  if (!skeletonHelper) return;
+  showBones = !showBones; skeletonHelper.visible = showBones;
+  $('skeleton').textContent = showBones ? 'Hide skeleton' : 'Show skeleton';
+});
+async function renderPmx(buffer, displayName, sourceSize, zipEntries = []) {
+  initViewer(); clearModel(); empty.style.display = 'grid';
+  setStatus('Preparing model and textures…');
+  sourceModelFileName = displayName.replace(/\.pmx$/i,'');
+  $('fileName').textContent = displayName;
+  if (!$('metaName').value.trim()) $('metaName').value = sourceModelFileName;
+  $('fileSize').textContent = (sourceSize / 1048576).toFixed(2) + ' MB';
+  $('meshCount').textContent = '—'; $('materialCount').textContent = '—'; $('boneCount').textContent = '—';
+  $('details').textContent = 'Loading the MMD parser and reading model data…';
+  try {
+    if (zipEntries.length) {
+      clearTextureUrls();
+      for (const entry of zipEntries) addTextureBlob(entry.name, await entry.async('blob'));
+      $('textureCount').textContent = String(zipEntries.length);
+    }
+    const manager = new THREE.LoadingManager();
+    manager.setURLModifier(url => textureMap.get(normalizePath(url)) || textureMap.get(normalizeName(url)) || url);
+    manager.onError = url => setStatus('Model parsed; a texture could not be loaded: ' + normalizeName(url), '');
+    const loader = new MMDLoader(manager);
+    // Bypass MMDLoader.load() because its extension detector examines the
+    // full Blob URL (including the github.io host) and misidentifies ".io/...".
+    // loadPMX() reads/parses the ArrayBuffer directly; MeshBuilder then creates
+    // the SkinnedMesh without requiring a filename extension.
+    setStatus('Parsing PMX…');
+    const modelUrl = URL.createObjectURL(new Blob([buffer], { type: 'application/octet-stream' }));
+    let model;
+    try {
+      model = await new Promise((resolve, reject) => {
+        loader.loadPMX(modelUrl, data => {
+          try {
+            const builder = loader.meshBuilder.setCrossOrigin(loader.crossOrigin);
+            resolve(builder.build(data, '', undefined, reject));
+          } catch (buildError) {
+            reject(buildError);
+          }
+        }, undefined, reject);
+      });
+    } finally {
+      URL.revokeObjectURL(modelUrl);
+    }
+    if (!model || !model.isSkinnedMesh || !model.geometry || !model.skeleton) {
+      throw new Error('MMDLoader did not produce a valid skinned PMX model.');
+    }
+    // Center the actual skinned preview and place its lowest point on the grid.
+    // Keep the imported PMX mesh and its bind pose untouched inside a preview group.
+    model.updateMatrixWorld(true);
+    if (typeof model.computeBoundingBox === 'function') model.computeBoundingBox();
+    const modelBounds = model.boundingBox
+      ? model.boundingBox.clone().applyMatrix4(model.matrixWorld)
+      : new THREE.Box3().setFromObject(model);
+    if (modelBounds.isEmpty()) throw new Error('The PMX model has no measurable geometry bounds.');
+    const modelCenter = modelBounds.getCenter(new THREE.Vector3());
+    const previewRoot = new THREE.Group();
+    previewRoot.name = 'PMX_Preview_Centering';
+    previewRoot.add(model);
+    previewRoot.position.set(-modelCenter.x, -modelBounds.min.y, -modelCenter.z);
+    currentModel = previewRoot;
+    scene.add(currentModel);
+    skeletonHelper = new THREE.SkeletonHelper(model);
+    skeletonHelper.visible = false; currentModel.add(skeletonHelper);
+    currentModel.updateMatrixWorld(true);
+    showBones = false; $('skeleton').textContent = 'Show skeleton'; $('skeleton').disabled = false;
+    empty.style.display = 'none'; frameModel(currentModel);
+    $('downloadGlb').disabled = false;
+    updateExportButtons();
+    let meshes = 0, materials = 0;
+    model.traverse(obj => {
+      if (obj.isMesh) { meshes++; materials += Array.isArray(obj.material) ? obj.material.length : (obj.material ? 1 : 0); }
+    });
+    $('meshCount').textContent = String(meshes);
+    $('materialCount').textContent = String(materials);
+    $('boneCount').textContent = String(model.skeleton ? model.skeleton.bones.length : 0);
+    sourceBones = model.skeleton ? model.skeleton.bones : [];
+    buildMappingEditor();
+    autoMapBones();
+    $('details').textContent = 'PMX data parsed. Core-body and finger Humanoid mapping are available as preparation tools; they do not yet validate skin weights, IK, physics, or VRM compatibility.';
+    setStatus('PMX parsed — preview ready', 'good');
+  } catch (err) {
+    console.error(err);
+    const reason = err && err.message ? err.message : String(err);
+    setStatus('PMX load failed: ' + reason.slice(0, 90), 'bad');
+    $('details').textContent = 'PMX loading error: ' + reason + ' Check that the file is a valid PMX. Some texture formats may not be supported in this preview yet.';
+    empty.style.display = 'grid';
+  }
+}
+
+const humanoidSlots = [
+  ['hips','Hips'],['spine','Spine'],['chest','Chest'],['neck','Neck'],['head','Head'],
+  ['leftShoulder','Left Shoulder'],['leftUpperArm','Left Upper Arm'],['leftLowerArm','Left Lower Arm'],['leftHand','Left Hand'],
+  ['rightShoulder','Right Shoulder'],['rightUpperArm','Right Upper Arm'],['rightLowerArm','Right Lower Arm'],['rightHand','Right Hand'],
+  ['leftUpperLeg','Left Upper Leg'],['leftLowerLeg','Left Lower Leg'],['leftFoot','Left Foot'],
+  ['rightUpperLeg','Right Upper Leg'],['rightLowerLeg','Right Lower Leg'],['rightFoot','Right Foot'],
+  ...['Thumb','Index','Middle','Ring','Little'].flatMap(finger =>
+    ['Proximal','Intermediate','Distal'].flatMap(segment => [
+      ['left'+finger+segment,'Left '+finger+' '+segment],
+      ['right'+finger+segment,'Right '+finger+' '+segment]
+    ])
+  )
+];
+const boneAliases = {
+  hips:['hips','pelvis','root','センター','下半身','腰','骨盤','bip001pelvis','bip01pelvis'],
+  spine:['spine','上半身','胴体','胸下','bip001spine','bip01spine'],
+  chest:['chest','上半身2','上半身３','胸','胸上','bip001spine1','bip01spine1'],
+  neck:['neck','首','bip001neck','bip01neck'],
+  head:['head','頭','頭部','bip001head','bip01head'],
+  leftShoulder:['leftshoulder','lshoulder','shoulderl','左肩','左肩p','bip001lclavicle','bip01lclavicle'],
+  leftUpperArm:['leftupperarm','leftarm','upperarml','lupperarm','左腕','左腕捩','bip001lupperarm','bip01lupperarm'],
+  leftLowerArm:['leftlowerarm','leftforearm','lowerarml','lelbow','左ひじ','左肘','左腕ひじ','bip001lforearm','bip01lforearm'],
+  leftHand:['lefthand','lhand','左手首','左手','bip001lhand','bip01lhand'],
+  rightShoulder:['rightshoulder','rshoulder','shoulderr','右肩','右肩p','bip001rclavicle','bip01rclavicle'],
+  rightUpperArm:['rightupperarm','rightarm','upperarmr','rupperarm','右腕','右腕捩','bip001rupperarm','bip01rupperarm'],
+  rightLowerArm:['rightlowerarm','rightforearm','lowerarmr','relbow','右ひじ','右肘','右腕ひじ','bip001rforearm','bip01rforearm'],
+  rightHand:['righthand','rhand','右手首','右手','bip001 rhand','bip001rhand','bip01rhand'],
+  leftUpperLeg:['leftupperleg','leftupleg','leftthigh','thighl','lupleg','左足','左脚','左足d','bip001lthigh','bip01lthigh'],
+  leftLowerLeg:['leftlowerleg','leftleg','leftcalf','calfl','左ひざ','左膝','左足ひざ','bip001lcalf','bip01lcalf'],
+  leftFoot:['leftfoot','footl','左足首','左足首d','左足先','bip001lfoot','bip01lfoot'],
+  rightUpperLeg:['rightupperleg','rightupleg','rightthigh','thighr','rupleg','右足','右脚','bip001rthigh','bip01rthigh'],
+  rightLowerLeg:['rightlowerleg','rightleg','rightcalf','calfr','右ひざ','右膝','右足ひざ','bip001rcalf','bip01rcalf'],
+  rightFoot:['rightfoot','footr','右足首','右足首d','右足先','bip001rfoot','bip01rfoot'],
+  leftThumbProximal:['leftthumbproximal','thumb01l','lthumb1','親指０１','左親指０１','左親指１'],
+  leftThumbIntermediate:['leftthumbintermediate','thumb02l','lthumb2','親指０２','左親指０２','左親指２'],
+  leftThumbDistal:['leftthumbdistal','thumb03l','lthumb3','親指０３','左親指０３','左親指３'],
+  rightThumbProximal:['rightthumbproximal','thumb01r','rthumb1','親指０１','右親指０１','右親指１'],
+  rightThumbIntermediate:['rightthumbintermediate','thumb02r','rthumb2','親指０２','右親指０２','右親指２'],
+  rightThumbDistal:['rightthumbdistal','thumb03r','rthumb3','親指０３','右親指０３','右親指３'],
+  leftIndexProximal:['leftindexproximal','index01l','lindex1','人指０１','左人指０１','左人指１','IndexProximal_L_1'],
+  leftIndexIntermediate:['leftindexintermediate','index02l','lindex2','人指０２','左人指０２','左人指２'],
+  leftIndexDistal:['leftindexdistal','index03l','lindex3','人指０３','左人指０３','左人指３'],
+  rightIndexProximal:['rightindexproximal','index01r','rindex1','右人指０１','右人指１','IndexProximal_R_1'],
+  rightIndexIntermediate:['rightindexintermediate','index02r','rindex2','右人指０２','右人指２'],
+  rightIndexDistal:['rightindexdistal','index03r','rindex3','右人指０３','右人指３'],
+  leftMiddleProximal:['leftmiddleproximal','middle01l','lmiddle1','中指０１','左中指０１'],
+  leftMiddleIntermediate:['leftmiddleintermediate','middle02l','lmiddle2','中指０２','左中指０２'],
+  leftMiddleDistal:['leftmiddledistal','middle03l','lmiddle3','中指０３','左中指０３'],
+  rightMiddleProximal:['rightmiddleproximal','middle01r','rmiddle1','右中指０１'],
+  rightMiddleIntermediate:['rightmiddleintermediate','middle02r','rmiddle2','右中指０２'],
+  rightMiddleDistal:['rightmiddledistal','middle03r','rmiddle3','右中指０３'],
+  leftRingProximal:['leftringproximal','ring01l','lring1','薬指０１','左薬指０１'],
+  leftRingIntermediate:['leftringintermediate','ring02l','lring2','薬指０２','左薬指０２'],
+  leftRingDistal:['leftringdistal','ring03l','lring3','薬指０３','左薬指０３'],
+  rightRingProximal:['rightringproximal','ring01r','rring1','右薬指０１'],
+  rightRingIntermediate:['rightringintermediate','ring02r','rring2','右薬指０２'],
+  rightRingDistal:['rightringdistal','ring03r','rring3','右薬指０３'],
+  leftLittleProximal:['leftlittleproximal','little01l','pinky01l','llittle1','小指０１','左小指０１'],
+  leftLittleIntermediate:['leftlittleintermediate','little02l','pinky02l','llittle2','小指０２','左小指０２'],
+  leftLittleDistal:['leftlittledistal','little03l','pinky03l','llittle3','小指０３','左小指０３'],
+  rightLittleProximal:['rightlittleproximal','little01r','pinky01r','rlittle1','右小指０１'],
+  rightLittleIntermediate:['rightlittleintermediate','little02r','pinky02r','rlittle2','右小指０２'],
+  rightLittleDistal:['rightlittledistal','little03r','pinky03r','rlittle3','右小指０３']
+};
+function compactBoneName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+    .replace(/[\s_・.\-:（）()]/g,'');
+}
+function getSlotAliases(slot) {
+  const side = slot.startsWith('left') ? 'L' : slot.startsWith('right') ? 'R' : '';
+  const isLeft = side === 'L';
+  const jaSide = isLeft ? '左' : '右';
+  const finger = ['Thumb','Index','Middle','Ring','Little'].find(name => slot.includes(name));
+  if (!finger) return boneAliases[slot] || [];
+  const segment = slot.endsWith('Proximal') ? 1 : slot.endsWith('Intermediate') ? 2 : 3;
+  const english = {Thumb:'thumb',Index:'index',Middle:'middle',Ring:'ring',Little:'little'}[finger];
+  const japanese = {Thumb:'親指',Index:'人指',Middle:'中指',Ring:'薬指',Little:'小指'}[finger];
+  const n = String(segment), nn = n.padStart(2,'0');
+  const aliases = [
+    slot, side + finger + (segment === 1 ? 'Proximal' : segment === 2 ? 'Intermediate' : 'Distal'),
+    english + nn + side, english + n + side,
+    side.toLowerCase() + english + nn, side.toLowerCase() + english + n,
+    side + finger + (segment === 1 ? 'Proximal' : segment === 2 ? 'Intermediate' : 'Distal'),
+    english + (segment === 1 ? 'proximal' : segment === 2 ? 'intermediate' : 'distal') + side,
+    finger + (segment === 1 ? 'Proximal' : segment === 2 ? 'Intermediate' : 'Distal') + '_' + side,
+    finger + (segment === 1 ? 'Proximal' : segment === 2 ? 'Intermediate' : 'Distal') + '_' + side + '_1',
+    jaSide + japanese + (finger === 'Thumb' ? String(segment - 1) : n),
+    jaSide + japanese + (finger === 'Thumb' ? String(segment - 1).padStart(2,'0') : nn),
+    jaSide + japanese + (finger === 'Thumb' ? String(segment - 1) : n)
+  ];
+  return [...new Set(aliases)];
+}
+function detectBoneSide(original) {
+  const raw = String(original || '').toLowerCase();
+  const leftSuffix = /(?:thumb|index|middle|ring|little|upperarm|lowerarm|forearm|shoulder|hand|thigh|calf|foot)[a-z0-9]*l$/;
+  const rightSuffix = /(?:thumb|index|middle|ring|little|upperarm|lowerarm|forearm|shoulder|hand|thigh|calf|foot)[a-z0-9]*r$/;
+  const leftPrefix = /^l(?:thumb|index|middle|ring|little|upperarm|lowerarm|forearm|shoulder|hand|thigh|calf|foot)/;
+  const rightPrefix = /^r(?:thumb|index|middle|ring|little|upperarm|lowerarm|forearm|shoulder|hand|thigh|calf|foot)/;
+  if (/(^|[^a-z])left([^a-z]|$)|左/.test(raw) || /(?:^|[_ .-])l(?:$|[_ .-])/.test(raw) || /_(?:l)(?:_|$)/.test(raw) || /(?:^|[_ .-])l\d*$/.test(raw) || leftSuffix.test(raw) || leftPrefix.test(raw)) return 'left';
+  if (/(^|[^a-z])right([^a-z]|$)|右/.test(raw) || /(?:^|[_ .-])r(?:$|[_ .-])/.test(raw) || /_(?:r)(?:_|$)/.test(raw) || /(?:^|[_ .-])r\d*$/.test(raw) || rightSuffix.test(raw) || rightPrefix.test(raw)) return 'right';
+  const compact = compactBoneName(raw);
+  if (/left|左/.test(compact)) return 'left';
+  if (/right|右/.test(compact)) return 'right';
+  return '';
+}
+function scoreBoneForSlot(boneName, slot) {
+  const original = String(boneName || '');
+  const name = compactBoneName(original);
+  let best = 0;
+  for (const aliasRaw of getSlotAliases(slot)) {
+    const alias = compactBoneName(aliasRaw);
+    if (!alias) continue;
+    if (name === alias) best = Math.max(best, 120);
+    else if (alias.length >= 7 && name.includes(alias)) best = Math.max(best, 82);
+  }
+  const side = detectBoneSide(original);
+  if (slot.startsWith('left') && side !== 'left') return 0;
+  if (slot.startsWith('right') && side !== 'right') return 0;
+  // Never guess a finger side from a side-less name: this prevents mirrored hands.
+  if ((slot.startsWith('left') || slot.startsWith('right')) && !side) return 0;
+  return best;
+}
+function buildMappingEditor() {
+  const list = $('mappingList');
+  if (!list) return;
+  list.innerHTML = '';
+  const options = sourceBones.map((bone,index) => ({name:bone.name || 'Bone '+index,index}));
+  for (const [slot,label] of humanoidSlots) {
+    const row = document.createElement('div'); row.className = 'map-row';
+    const title = document.createElement('label'); title.textContent = label; title.htmlFor = 'map_'+slot;
+    const select = document.createElement('select'); select.id = 'map_'+slot;
+    const emptyOption = document.createElement('option'); emptyOption.value = ''; emptyOption.textContent = '— Not mapped —'; select.appendChild(emptyOption);
+    for (const item of options) {
+      const option = document.createElement('option'); option.value = String(item.index); option.textContent = item.name; select.appendChild(option);
+    }
+    select.value = humanoidMapping[slot] == null ? '' : String(humanoidMapping[slot]);
+    select.addEventListener('change', () => { humanoidMapping[slot] = select.value === '' ? null : Number(select.value); updateMappingSummary(); updateExportButtons(); });
+    row.append(title,select); list.appendChild(row);
+  }
+  updateMappingSummary();
+  updateExportButtons();
+}
+function updateMappingSummary() {
+  const mapped = humanoidSlots.filter(([slot]) => Number.isInteger(humanoidMapping[slot])).length;
+  const required = ['hips','spine','head','leftUpperArm','leftLowerArm','leftHand','rightUpperArm','rightLowerArm','rightHand','leftUpperLeg','leftLowerLeg','leftFoot','rightUpperLeg','rightLowerLeg','rightFoot'];
+  const missing = required.filter(slot => !Number.isInteger(humanoidMapping[slot]));
+  const used = humanoidSlots.map(([slot]) => humanoidMapping[slot]).filter(Number.isInteger);
+  const duplicates = [...new Set(used.filter((value,index) => used.indexOf(value) !== index))];
+  let message = mapped+' / '+humanoidSlots.length+' bones mapped. '+missing.length+' required roles missing.';
+  if (duplicates.length) message += ' Warning: '+duplicates.length+' source bone(s) are assigned more than once.';
+  if (!missing.length && !duplicates.length) message += ' Core mapping is complete; verify every assignment visually.';
+  $('mapSummary').textContent = message;
+}
+function autoMapBones() {
+  updateExportButtons();
+  if (!sourceBones.length) { $('mapSummary').textContent = 'Load a PMX model first.'; return; }
+  humanoidMapping = {};
+  const claimed = new Set();
+  for (const [slot] of humanoidSlots) {
+    let winner = null, best = 0;
+    sourceBones.forEach((bone,index) => {
+      if (claimed.has(index)) return;
+      const score = scoreBoneForSlot(bone.name,slot);
+      if (score > best) { best = score; winner = index; }
+    });
+    if (winner !== null && best >= 75) { humanoidMapping[slot] = winner; claimed.add(winner); }
+  }
+  buildMappingEditor();
+}
+$('autoMap').addEventListener('click', autoMapBones);
+$('clearMap').addEventListener('click', () => { humanoidMapping = {}; buildMappingEditor(); updateExportButtons(); });
+for (const id of ['metaName','metaVersion','metaAuthor','metaContact','metaReference','metaAllowed','metaLicense','metaCommercial','metaViolent','metaSexual','metaOther']) {
+  $(id).addEventListener('input', updateMetadataSummary);
+  $(id).addEventListener('change', updateMetadataSummary);
+}
+function updateMetadataSummary() {
+  $('metadataSummary').textContent = 'Prepared metadata: '+($('metaName').value.trim() || 'Untitled model')+' · v'+($('metaVersion').value.trim() || '1.0')+' · Author: '+($('metaAuthor').value.trim() || 'Not specified')+'. Ready for browser-based VRM export.';
+}
+updateMetadataSummary();
+
+const REQUIRED_0X = ['hips','spine','chest','neck','head','leftUpperArm','leftLowerArm','leftHand','rightUpperArm','rightLowerArm','rightHand','leftUpperLeg','leftLowerLeg','leftFoot','rightUpperLeg','rightLowerLeg','rightFoot'];
+const REQUIRED_1X = ['hips','spine','head','leftUpperArm','leftLowerArm','leftHand','rightUpperArm','rightLowerArm','rightHand','leftUpperLeg','leftLowerLeg','leftFoot','rightUpperLeg','rightLowerLeg','rightFoot'];
+function getRequiredMissing(required) {
+  return required.filter(slot => !Number.isInteger(humanoidMapping[slot]) || !sourceBones[humanoidMapping[slot]]);
+}
+function updateExportButtons() {
+  const missing0 = getRequiredMissing(REQUIRED_0X);
+  const missing1 = getRequiredMissing(REQUIRED_1X);
+  $('exportVrm0').disabled = !currentModel || exportBusy || missing0.length > 0;
+  $('exportVrm1').disabled = !currentModel || exportBusy || missing1.length > 0;
+  if (currentModel) {
+    const notes = [];
+    if (missing0.length) notes.push('0.x missing: '+missing0.join(', '));
+    if (missing1.length) notes.push('1.0 missing: '+missing1.join(', '));
+    if (notes.length) $('exportStatus').textContent = notes.join(' · ');
+    else $('exportStatus').textContent = 'Required Humanoid mappings are present. Choose VRM 0.x or 1.0 to export a test file.';
+  }
+}
+function getBrowserMeta(format) {
+  const title = $('metaName').value.trim() || sourceModelFileName || 'Aster Model';
+  const author = $('metaAuthor').value.trim();
+  if (!author) throw new Error('Please enter an Author in Model information.');
+  if (format === '0.x') {
+    const licenseMap = {
+      Redistribution_Prohibited:'Redistribution_Prohibited',
+      CC0:'CC0', CC_BY:'CC_BY', CC_BY_NC:'CC_BY_NC',
+      CC_BY_NC_SA:'CC_BY_NC_SA', Other:'Other'
+    };
+    return {
+      title, author, version:$('metaVersion').value.trim(),
+      contactInformation:$('metaContact').value.trim(),
+      reference:$('metaReference').value.trim(),
+      allowedUserName:$('metaAllowed').value,
+      licenseName:licenseMap[$('metaLicense').value] || 'Redistribution_Prohibited',
+      commercialUssageName:$('metaCommercial').value,
+      violentUssageName:$('metaViolent').value,
+      sexualUssageName:$('metaSexual').value,
+      otherLicenseUrl:$('metaOther').value.trim()
+    };
+  }
+  const permission = $('metaAllowed').value;
+  const commercial = $('metaCommercial').value === 'Allow' ? 'personalProfit' : 'personalNonProfit';
+  return {
+    name:title, authors:[author], version:$('metaVersion').value.trim(),
+    contactInformation:$('metaContact').value.trim(),
+    references:$('metaReference').value.trim() ? [$('metaReference').value.trim()] : [],
+    licenseUrl:'https://vrm.dev/licenses/1.0/',
+    avatarPermission:permission === 'Everyone' ? 'everyone' : permission === 'ExplicitlyLicensedPerson' ? 'onlySeparatelyLicensedPerson' : 'onlyAuthor',
+    commercialUsage:commercial, creditNotation:'required', modification:'prohibited',
+    allowExcessivelyViolentUsage:$('metaViolent').value === 'Allow',
+    allowExcessivelySexualUsage:$('metaSexual').value === 'Allow'
+  };
+}
+function prepareExportRoot() {
+  currentModel.updateMatrixWorld(true);
+  const pmxRoot = currentModel.children.find(child => child !== skeletonHelper && !child.isSkeletonHelper);
+  if (!pmxRoot) throw new Error('Could not find the PMX model node inside the preview.');
+  const root = cloneSkeleton(pmxRoot);
+  root.position.copy(currentModel.position);
+  root.quaternion.copy(currentModel.quaternion);
+  root.scale.copy(currentModel.scale);
+  root.name = $('metaName').value.trim() || sourceModelFileName || 'Aster_Model';
+  root.traverse(obj => {
+    if (!obj.isMesh) return;
+    obj.frustumCulled = false;
+    const convert = material => {
+      const standard = new THREE.MeshStandardMaterial({
+        name:material.name || 'PMX Material',
+        color:material.color ? material.color.clone() : new THREE.Color(0xffffff),
+        map:material.map || null, alphaMap:material.alphaMap || null,
+        transparent:!!material.transparent, opacity:material.opacity == null ? 1 : material.opacity,
+        side:material.side == null ? THREE.DoubleSide : material.side,
+        roughness:0.85, metalness:0
+      });
+      if (material.emissive) standard.emissive.copy(material.emissive);
+      if (material.emissiveMap) standard.emissiveMap = material.emissiveMap;
+      if (material.vertexColors) standard.vertexColors = true;
+      return standard;
+    };
+    obj.material = Array.isArray(obj.material) ? obj.material.map(convert) : convert(obj.material || {});
+  });
+  const wrapper = new THREE.Group();
+  wrapper.name = 'AsterAvatar';
+  wrapper.add(root);
+  // GLTF node names must be unambiguous for both VRM serializers.
+  const nameCounts = new Map();
+  wrapper.traverse(obj => {
+    if (obj.name) nameCounts.set(obj.name, (nameCounts.get(obj.name) || 0) + 1);
+  });
+  const usedNames = new Set();
+  let uniqueIndex = 0;
+  wrapper.traverse(obj => {
+    const original = obj.name || obj.type || 'Node';
+    if (nameCounts.get(original) > 1 || usedNames.has(original)) {
+      let candidate;
+      do { candidate = original + '__Aster_' + (++uniqueIndex); } while (usedNames.has(candidate));
+      obj.name = candidate;
+    }
+    usedNames.add(obj.name);
+  });
+  wrapper.updateMatrixWorld(true);
+  const clonedSkinnedMesh = [];
+  wrapper.traverse(obj => { if (obj.isSkinnedMesh && obj.skeleton) clonedSkinnedMesh.push(obj); });
+  if (!clonedSkinnedMesh.length) throw new Error('The cloned PMX has no SkinnedMesh skeleton.');
+  const clonedBones = clonedSkinnedMesh[0].skeleton.bones;
+  const humanoid = {};
+  for (const [slot,index] of Object.entries(humanoidMapping)) {
+    if (Number.isInteger(index) && clonedBones[index]) humanoid[slot] = clonedBones[index];
+  }
+  return { wrapper, humanoid };
+}
+function downloadBlob(blob, filename) {
+  if (!(blob instanceof Blob) || !blob.size) throw new Error('Exporter returned an empty file.');
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = filename; anchor.style.display = 'none';
+  document.body.appendChild(anchor); anchor.click(); anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+async function runVrmExport(format) {
+  if (!currentModel || exportBusy) return;
+  const required = format === '0.x' ? REQUIRED_0X : REQUIRED_1X;
+  const missing = getRequiredMissing(required);
+  if (missing.length) {
+    $('exportStatus').textContent = 'Please map these required bones first: '+missing.join(', ');
+    return;
+  }
+  exportBusy = true; updateExportButtons();
+  let prepared;
+  try {
+    $('exportStatus').textContent = 'Preparing avatar copy for VRM '+format+'…';
+    prepared = prepareExportRoot();
+    const meta = getBrowserMeta(format);
+    let result;
+    if (format === '0.x') {
+      const thumbFile = $('metaThumbnail').files?.[0];
+      result = await exportVrm0(prepared.wrapper, {
+        humanoid:prepared.humanoid, meta,
+        thumbnail:thumbFile || undefined
+      });
+    } else {
+      result = await exportVrm10(prepared.wrapper, {humanoid:prepared.humanoid, meta});
+    }
+    const base = (meta.title || meta.name || 'Aster_Model').replace(/[^a-z0-9_-]+/gi,'_');
+    downloadBlob(result.blob, base+'_VRM_'+(format === '0.x' ? '0x' : '1.0')+'.vrm');
+    $('exportStatus').textContent = 'VRM '+format+' file generated ('+(result.blob.size/1048576).toFixed(2)+' MB). Three-vrm read-back passed. This is an experimental export; please test it in your target app and report any issue.';
+  } catch (error) {
+    console.error('VRM '+format+' export diagnostic:', error);
+    $('exportStatus').textContent = 'VRM '+format+' export failed: '+(error?.message || String(error));
+  } finally {
+    if (prepared?.wrapper) prepared.wrapper.traverse(obj => {
+      // Geometry and textures are shared with the preview clone; do not dispose them here.
+      if (obj.material) for (const material of (Array.isArray(obj.material) ? obj.material : [obj.material])) material.dispose();
+    });
+    exportBusy = false; updateExportButtons();
+  }
+}
+$('exportVrm0').addEventListener('click', () => runVrmExport('0.x'));
+$('exportVrm1').addEventListener('click', () => runVrmExport('1.0'));
+$('downloadGlb').addEventListener('click', async () => {
+  if (!currentModel) { $('glbStatus').textContent = 'Load a PMX model first.'; return; }
+  const button = $('downloadGlb');
+  button.disabled = true;
+  $('glbStatus').textContent = 'Preparing a GLB-compatible copy…';
+  let exportRoot = null;
+  try {
+    // Clone only the actual PMX model child. Never clone the preview wrapper,
+    // because it also contains SkeletonHelper, which cannot be cloned safely.
+    currentModel.updateMatrixWorld(true);
+    const pmxRoot = currentModel.children.find(child => child !== skeletonHelper && !child.isSkeletonHelper);
+    if (!pmxRoot) throw new Error('Could not find the PMX model node inside the preview.');
+    exportRoot = cloneSkeleton(pmxRoot);
+    exportRoot.position.copy(currentModel.position);
+    exportRoot.quaternion.copy(currentModel.quaternion);
+    exportRoot.scale.copy(currentModel.scale);
+    exportRoot.name = $('metaName').value.trim() || sourceModelFileName || 'Aster_Model';
+    exportRoot.traverse(obj => {
+      if (!obj.isMesh) return;
+      obj.frustumCulled = false;
+      const convert = material => {
+        const standard = new THREE.MeshStandardMaterial({
+          name: material.name || 'PMX Material',
+          color: material.color ? material.color.clone() : new THREE.Color(0xffffff),
+          map: material.map || null,
+          alphaMap: material.alphaMap || null,
+          transparent: !!material.transparent,
+          opacity: material.opacity == null ? 1 : material.opacity,
+          side: material.side == null ? THREE.DoubleSide : material.side,
+          roughness: 0.85,
+          metalness: 0
+        });
+        if (material.emissive) standard.emissive.copy(material.emissive);
+        if (material.emissiveMap) standard.emissiveMap = material.emissiveMap;
+        if (material.vertexColors) standard.vertexColors = true;
+        return standard;
+      };
+      obj.material = Array.isArray(obj.material) ? obj.material.map(convert) : convert(obj.material || {});
+    });
+    const exportScene = new THREE.Group();
+    exportScene.name = 'Aster_GL B_Preview'.replace(/\s+/g, '');
+    exportScene.add(exportRoot);
+    exportScene.updateMatrixWorld(true);
+    $('glbStatus').textContent = 'Converting model and textures to GLB…';
+    const exporter = new GLTFExporter();
+    const result = await exporter.parseAsync(exportScene, {binary:true, onlyVisible:true});
+    if (!(result instanceof ArrayBuffer)) throw new Error('Exporter did not return a binary GLB file.');
+    const blob = new Blob([result], {type:'model/gltf-binary'});
+    if (!blob.size) throw new Error('The generated GLB file is empty.');
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const base = ($('metaName').value.trim() || sourceModelFileName || 'Aster_Model').replace(/[^a-z0-9_-]+/gi,'_');
+    anchor.href = url; anchor.download = base+'_Preview.glb';
+    anchor.style.display = 'none'; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    $('glbStatus').textContent = 'GLB generated ('+(blob.size/1048576).toFixed(2)+' MB). If Android did not start the download, check Chrome Downloads and allow downloads for this site. This is a preview GLB, not a VRM avatar.';
+  } catch (error) {
+    console.error('GLB export diagnostic:', error);
+    const message = error && error.message ? error.message : String(error);
+    const stack = error && error.stack ? error.stack.split('\n').slice(0,5).join(' | ') : 'No stack trace available';
+    $('glbStatus').textContent = 'GLB export failed: ' + message + ' — Details: ' + stack;
+  } finally {
+    if (exportRoot) exportRoot.traverse(obj => {
+      // Geometry and texture maps are shared with the preview model.
+      if (obj.material) for (const material of (Array.isArray(obj.material) ? obj.material : [obj.material])) material.dispose();
+    });
+    button.disabled = false;
+  }
+});
+
+
+input.addEventListener('change', async () => {
+  const file = input.files && input.files[0]; if (!file) return;
+  zipInput.value = '';
+  await renderPmx(await file.arrayBuffer(), file.name, file.size);
+});
+zipInput.addEventListener('change', async () => {
+  const file = zipInput.files && zipInput.files[0]; if (!file) return;
+  input.value = ''; textureInput.value = '';
+  setStatus('Opening ZIP package…');
+  $('fileName').textContent = file.name;
+  $('fileSize').textContent = (file.size / 1048576).toFixed(2) + ' MB';
+  try {
+    const archive = await JSZip.loadAsync(file);
+    const entries = Object.values(archive.files).filter(x => !x.dir);
+    const pmxFiles = entries.filter(x => /\.pmx$/i.test(x.name));
+    if (!pmxFiles.length) throw new Error('No .pmx file was found inside this ZIP archive.');
+    if (pmxFiles.length > 1) throw new Error('More than one PMX file was found. Please use a ZIP containing only one PMX model.');
+    const textureEntries = entries.filter(x => /\.(png|jpe?g|bmp|tga|spa|sph)$/i.test(x.name));
+    setStatus('Extracting PMX and ' + textureEntries.length + ' texture assets…');
+    const buffer = await pmxFiles[0].async('arraybuffer');
+    await renderPmx(buffer, pmxFiles[0].name.split('/').pop(), file.size, textureEntries);
+  } catch (err) {
+    console.error(err);
+    setStatus('Could not read ZIP package', 'bad');
+    $('details').textContent = err && err.message ? err.message : String(err);
+  }
+});
+</script>
+</body>
+</html>
