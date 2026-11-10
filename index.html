@@ -74,7 +74,7 @@ ul{padding-left:21px}.done{color:#23633b}
 <p class="note">Choose the avatar material style. The selected style is applied to the preview and embedded in VRM exports where supported.</p>
 <div class="grid">
 <div class="field"><label for="materialMode">Material mode</label><select id="materialMode"><option value="mtoon">MToon — anime cel shading</option><option value="unlit">Material Unlit — no lighting</option></select></div>
-<div class="field"><label for="shadingPreset">Shading preset</label><select id="shadingPreset"><option value="klee">Klee Kaboom Style</option><option value="classic">Classic Anime</option><option value="soft">Soft Anime</option></select></div>
+<div class="field"><label for="shadingPreset">Shading preset</label><select id="shadingPreset"><option value="klee">Bright Anime Toon</option><option value="classic">Classic Anime</option><option value="soft">Soft Anime</option></select></div>
 <div class="field"><label for="shadeColor">Shadow color</label><input id="shadeColor" type="color" value="#b8a2cf"></div>
 <div class="field"><label for="toony">Toon shadow strength</label><input id="toony" type="range" min="0" max="1" step="0.01" value="0.92"></div>
 </div>
@@ -756,7 +756,7 @@ function prepareExportRoot() {
     obj.material = Array.isArray(obj.material) ? obj.material.map(convert) : convert(obj.material || {});
   });
   const wrapper = new THREE.Group();
-  wrapper.name = 'AsterAvatar';
+  wrapper.name = 'RootModel';
   wrapper.add(root);
   // GLTF node names must be unambiguous for both VRM serializers.
   const nameCounts = new Map();
