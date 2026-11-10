@@ -33,6 +33,43 @@ const LICENSES = new Set([
   'CC_BY_SA', 'CC_BY_NC_SA', 'CC_BY_ND', 'CC_BY_NC_ND', 'Other',
 ]);
 
+function hexToLinearRgb(hex) {
+  const value = String(hex || '#b8a2cf').replace('#','');
+  const rgb = [0,2,4].map(i => parseInt(value.slice(i,i+2),16) / 255);
+  return rgb.map(c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+}
+function buildMaterialProperties(json, style = {}) {
+  const mode = style.mode === 'unlit' ? 'unlit' : 'mtoon';
+  const shade = hexToLinearRgb(style.shadeColor);
+  const toony = Math.max(0, Math.min(1, Number(style.shadingToonyFactor ?? 0.92)));
+  const shift = Number.isFinite(Number(style.shadingShiftFactor)) ? Number(style.shadingShiftFactor) : -0.04;
+  return (json.materials || []).map(material => {
+    const textureIndex = material.pbrMetallicRoughness?.baseColorTexture?.index;
+    const properties = {
+      name: material.name || 'PMX Material',
+      shader: mode === 'unlit' ? 'VRM/UnlitTexture' : 'VRM/MToon',
+      renderQueue: 2000,
+      floatProperties: mode === 'unlit' ? {} : {
+        _ShadeShift: shift,
+        _ShadeToony: toony,
+        _RimFresnelPower: 5.0,
+        _RimLift: 0.0,
+        _OutlineWidth: 0.0
+      },
+      vectorProperties: mode === 'unlit' ? {} : {
+        _Color: [1,1,1,1],
+        _ShadeColor: [...shade,1],
+        _RimColor: [0.12,0.09,0.18,1],
+        _OutlineColor: [0,0,0,1]
+      },
+      textureProperties: Number.isInteger(textureIndex) ? { _MainTex: textureIndex } : {},
+      keywordMap: {},
+      tagMap: {}
+    };
+    return properties;
+  });
+}
+
 function requiredText(value, label) {
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(label + ' is required.');
@@ -373,6 +410,7 @@ export async function exportVrm0(scene, options = {}) {
   };
 
   const blendShapeMaster = buildBlendShapeMaster(options.blendShapeGroups, scene, json);
+  const materialProperties = buildMaterialProperties(json, options.materialStyle);
 
   const vrm = {
     specVersion: '0.0',
@@ -390,6 +428,7 @@ export async function exportVrm0(scene, options = {}) {
       hasTranslationDoF: false,
     },
     firstPerson,
+    materialProperties,
   };
   if (blendShapeMaster) vrm.blendShapeMaster = blendShapeMaster;
 
@@ -417,7 +456,7 @@ export async function exportVrm0(scene, options = {}) {
       humanoidBones: humanoid.humanBones.length,
       blendShapeGroups: blendShapeMaster?.blendShapeGroups.length || 0,
       thumbnailTextureIndex,
-      note: 'VRM 0.x core: metadata, humanoid and first-person are serialized. MToon material mapping and secondary animation are not yet serialized.',
+      note: 'VRM 0.x metadata, humanoid, first-person and materialProperties (MToon or Unlit) are serialized. Secondary animation remains unfinished.',
     },
   };
 }
