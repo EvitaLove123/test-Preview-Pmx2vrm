@@ -13,12 +13,12 @@ https://aster-pmx2vrm-preview.vercel.app/
 - Auto T-pose and Reset pose controls
 - Model metadata and VRM 0.x thumbnail input
 - Material modes: MToon anime shading and Material Unlit
-- Klee Kaboom-inspired toon preset, plus Classic Anime and Soft Anime presets
+- Bright Anime Toon preset, plus Classic Anime and Soft Anime presets
 - Browser-side VRM 0.x and VRM 1.0 export modules
 - Standalone smoke-test pages for both exporter paths
 
 ## Important status
-This is an experimental test build, not a verified general-purpose PMX-to-VRM converter. A file being downloaded does not prove it is valid or compatible. Test exported VRMs in a validator and target apps such as VRM Posing Mobile or Virtual Droid before relying on them. The MToon/Unlit extension data is written by the browser exporters, but exact visual matching and target-app rendering still require testing with real models. MMD physics, IK, expressions, SpringBone and colliders are not fully converted.
+This is an experimental test build, not a verified general-purpose PMX-to-VRM converter. A file being downloaded does not prove it is valid or compatible. Test exported VRMs in a validator and target apps such as VRM Posing Mobile or Virtual Droid before relying on them. The MToon/Unlit extension data is written by the browser exporters, but exact visual matching and target-app rendering still require testing with real models. MMD physics, IK, expressions, SpringBone groups and colliders are not fully converted. VRM 0.x includes an empty secondaryAnimation container for parser compatibility; this does not add working hair/clothing physics.
 
 ## Browser requirements
 Use a modern browser with WebGL and module support. Three.js, JSZip and three-vrm are loaded from public CDNs, so internet access is required. Model files are processed locally in the browser; do not upload private or sensitive model files to public repositories.
