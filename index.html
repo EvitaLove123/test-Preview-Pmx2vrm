@@ -847,7 +847,7 @@ function prepareExportRoot() {
   for (const [slot,index] of Object.entries(humanoidMapping)) {
     if (Number.isInteger(index) && clonedBones[index]) humanoid[slot] = clonedBones[index];
   }
-  return { wrapper, humanoid };
+  return { wrapper, humanoid, bones: clonedBones };
 }
 function downloadBlob(blob, filename) {
   if (!(blob instanceof Blob) || !blob.size) throw new Error('Exporter returned an empty file.');
@@ -877,7 +877,18 @@ async function runVrmExport(format) {
       result = await exportVrm0(prepared.wrapper, {
         humanoid:prepared.humanoid, meta,
         materialStyle:materialStyleOptions(),
-        secondaryAnimation:{boneGroups:secondaryBoneGroups.map(group=>({...group,colliderGroups:secondaryColliderGroups.map((_,index)=>index)})),colliderGroups:secondaryColliderGroups},
+        secondaryAnimation:{
+          boneGroups:secondaryBoneGroups.map(group=>({
+            ...group,
+            bones:group.bones.map(bone=>prepared.bones[sourceBones.indexOf(bone)]).filter(Boolean),
+            center:group.center ? prepared.bones[sourceBones.indexOf(group.center)] || null : null,
+            colliderGroups:secondaryColliderGroups.map((_,index)=>index)
+          })),
+          colliderGroups:secondaryColliderGroups.map(group=>({
+            ...group,
+            node:prepared.bones[sourceBones.indexOf(group.node)]
+          }))
+        },
         thumbnail:thumbFile || undefined
       });
     } else {
