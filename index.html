@@ -120,7 +120,7 @@ ul{padding-left:21px}.done{color:#23633b}
 <li class="done">ZIP package import — first prototype</li>
 <li class="done">Interactive 3D preview — first browser prototype</li>
 <li class="done">Humanoid mapping editor — first prototype</li>
-<li class="done">Automatic and manual mapping for core body and finger humanoid bones — improved side-aware aliases</li>
+<li class="done">Automatic and manual mapping for body, finger and optional Toe humanoid bones — improved side-aware aliases</li>
 <li>Browser-native VRM 0.x and VRM 1.0 export buttons — connected to separate Three.js serializers; test on real PMX models</li>
 <li>VRM 0.x metadata, humanoid mapping, first-person, BlendShape and optional thumbnail — implementation scaffold; validator testing pending</li>
 <li>VRM 1.0 metadata and humanoid core — implementation scaffold; validator testing pending</li>
@@ -433,7 +433,7 @@ async function renderPmx(buffer, displayName, sourceSize, zipEntries = []) {
     sourceBones = model.skeleton ? model.skeleton.bones : [];
     buildMappingEditor();
     autoMapBones();
-    $('details').textContent = 'PMX data parsed. Core-body and finger Humanoid mapping are available as preparation tools; they do not yet validate skin weights, IK, physics, or VRM compatibility.';
+    $('details').textContent = 'PMX data parsed. Core-body, finger and optional Toe Humanoid mapping are available as preparation tools; they do not yet validate skin weights, IK, physics, or VRM compatibility.';
     setStatus('PMX parsed — preview ready', 'good');
   } catch (err) {
     console.error(err);
