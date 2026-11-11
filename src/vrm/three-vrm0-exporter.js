@@ -145,6 +145,25 @@ function normalizeMorphTargetNames(scene, gltfJson) {
   }
 }
 
+// Alyosha 2 compatibility marker: a standalone, root-level glTF node named "secondary".
+// This is distinct from the VRM 0.x secondaryAnimation extension below.
+function ensureSecondaryRootNode(gltfJson) {
+  if (!Array.isArray(gltfJson.nodes)) gltfJson.nodes = [];
+  const existingIndex = gltfJson.nodes.findIndex(node => node && node.name === 'secondary');
+  let nodeIndex = existingIndex;
+  if (nodeIndex < 0) {
+    nodeIndex = gltfJson.nodes.length;
+    gltfJson.nodes.push({ name: 'secondary' });
+  }
+  const sceneIndex = Number.isInteger(gltfJson.scene) ? gltfJson.scene : 0;
+  if (!Array.isArray(gltfJson.scenes) || !gltfJson.scenes[sceneIndex]) {
+    throw new Error('Cannot add the secondary node: the exported glTF scene is missing.');
+  }
+  const roots = gltfJson.scenes[sceneIndex].nodes || (gltfJson.scenes[sceneIndex].nodes = []);
+  if (!roots.includes(nodeIndex)) roots.push(nodeIndex);
+  return nodeIndex;
+}
+
 function buildSecondaryAnimation(scene, gltfJson, input = {}) {
   const boneInput = Array.isArray(input.boneGroups) ? input.boneGroups : [];
   const colliderInput = Array.isArray(input.colliderGroups) ? input.colliderGroups : [];
@@ -447,6 +466,7 @@ export async function exportVrm0(scene, options = {}) {
   }
 
   const { json, chunks } = readGlb(baseGlb);
+  const secondaryNodeIndex = ensureSecondaryRootNode(json);
   normalizeMorphTargetNames(scene, json);
   const thumbnailTextureIndex = await embedThumbnail(json, chunks, options.thumbnail);
   if (thumbnailTextureIndex !== null) meta.texture = thumbnailTextureIndex;
@@ -517,6 +537,7 @@ export async function exportVrm0(scene, options = {}) {
     report: {
       ...checked.report,
       nodes: json.nodes.length,
+      secondaryNode: secondaryNodeIndex,
       materials: (json.materials || []).length,
       meshes: (json.meshes || []).length,
       skins: (json.skins || []).length,
@@ -526,7 +547,7 @@ export async function exportVrm0(scene, options = {}) {
       springBoneGroups: secondaryAnimation.boneGroups.length,
       colliderGroups: secondaryAnimation.colliderGroups.length,
       thumbnailTextureIndex,
-      note: 'VRM 0.x metadata, humanoid, first-person, materialProperties, normalized morph target names, and configured Secondary Animation are serialized. Spring roots and collider spheres are included only when selected in the editor.',
+      note: 'VRM 0.x metadata, humanoid, first-person, materialProperties, normalized morph target names, and the standalone root-level secondary node and configured Secondary Animation are serialized. Spring roots and collider spheres are included only when selected in the editor.',
     },
   };
 }
