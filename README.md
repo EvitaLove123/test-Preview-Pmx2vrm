@@ -9,8 +9,9 @@ https://aster-pmx2vrm-preview.vercel.app/
 - PMX and ZIP import (one PMX per ZIP)
 - Mobile 3D preview with touch orbit, zoom and pan
 - Separate texture selection and ZIP texture extraction
-- Skeleton inspection and humanoid mapping editor
+- Skeleton inspection and humanoid mapping editor, including optional Left/Right Toes roles
 - Auto T-pose and Reset pose controls
+- Toggle model orientation by 180° around the Y axis (included in VRM export)
 - Model metadata and VRM 0.x thumbnail input
 - Material modes: MToon anime shading and Material Unlit
 - Bright Anime Toon preset, plus Classic Anime and Soft Anime presets
