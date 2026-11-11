@@ -69,6 +69,30 @@ ul{padding-left:21px}.done{color:#23633b}
 <div class="map-summary" id="mapSummary">Load a PMX model to inspect and map its humanoid bones.</div>
 <div class="mapping-list" id="mappingList"></div>
 </section>
+<section class="card" id="secondaryCard">
+<h2>4. Secondary Animation — VRM 0.x</h2>
+<p class="note">Select the root bone of each hair, skirt, tail or accessory chain. Child bones follow through the skeleton hierarchy. Colliders are sphere shapes attached to a selected bone. Nothing is auto-assigned.</p>
+<div class="grid">
+<div class="field"><label for="secondaryRoot">Spring root bone</label><select id="secondaryRoot"><option value="">Load a PMX model first</option></select></div>
+<div class="field"><label for="secondaryCenter">Center bone (optional)</label><select id="secondaryCenter"><option value="">— None —</option></select></div>
+<div class="field"><label for="springStiffness">Stiffness</label><input id="springStiffness" type="number" min="0" max="1000" step="0.1" value="1"></div>
+<div class="field"><label for="springGravity">Gravity power</label><input id="springGravity" type="number" min="0" max="10" step="0.01" value="0.5"></div>
+<div class="field"><label for="springDrag">Drag force</label><input id="springDrag" type="number" min="0" max="1" step="0.01" value="0.4"></div>
+<div class="field"><label for="springHitRadius">Spring hit radius</label><input id="springHitRadius" type="number" min="0" max="1" step="0.001" value="0.02"></div>
+</div>
+<button id="addSpringGroup" type="button" disabled>Add Spring Bone Group</button>
+<div class="map-summary" id="springGroupList">No Spring Bone groups added.</div>
+<div class="grid" style="margin-top:12px">
+<div class="field"><label for="colliderNode">Collider bone</label><select id="colliderNode"><option value="">Load a PMX model first</option></select></div>
+<div class="field"><label for="colliderRadius">Sphere radius</label><input id="colliderRadius" type="number" min="0.001" max="10" step="0.001" value="0.08"></div>
+<div class="field"><label for="colliderX">Offset X</label><input id="colliderX" type="number" step="0.001" value="0"></div>
+<div class="field"><label for="colliderY">Offset Y</label><input id="colliderY" type="number" step="0.001" value="0"></div>
+<div class="field"><label for="colliderZ">Offset Z</label><input id="colliderZ" type="number" step="0.001" value="0"></div>
+</div>
+<button id="addCollider" type="button" class="secondary" disabled>Add Collider Sphere</button>
+<div class="map-summary" id="colliderList">No collider groups added.</div>
+<p class="note">Every Spring Bone group is linked to all collider groups in this editor. Review selected bones and collider positions before exporting. PMX rigid-body physics is not converted automatically.</p>
+</section>
 <section class="card" id="materialCard">
 <h2>4. Material &amp; shading</h2>
 <p class="note">Choose the avatar material style. The selected style is applied to the preview and embedded in VRM exports where supported.</p>
@@ -124,8 +148,9 @@ ul{padding-left:21px}.done{color:#23633b}
 <li>Browser-native VRM 0.x and VRM 1.0 export buttons — connected to separate Three.js serializers; test on real PMX models</li>
 <li>VRM 0.x metadata, humanoid mapping, first-person, BlendShape and optional thumbnail — implementation scaffold; validator testing pending</li>
 <li>VRM 1.0 metadata and humanoid core — implementation scaffold; validator testing pending</li>
-<li>Safe A-pose to T-pose adjustment — planned</li>
-<li>Expressions, material conversion, SpringBone and colliders — further conversion/validation work required</li>
+<li>Safe A-pose to T-pose adjustment — available as a manual preview/export pose tool</li>
+<li>VRM 0.x Secondary Animation editor — manual spring roots, stiffness/gravity/drag settings, and sphere collider groups; target-app validation pending</li>
+<li>Morph target names are normalized during export; VRM Expression group authoring remains unfinished</li>
 </ul>
 <p class="note">This is an early PMX inspection prototype, not a PMX-to-VRM converter. Parsing and preview must still be tested with representative PMX models on Android Chrome.</p>
 </section>
@@ -134,7 +159,7 @@ ul{padding-left:21px}.done{color:#23633b}
 <ul>
 <li>ZIP import extracts one PMX plus common texture assets, but texture path matching and legacy formats still need model-by-model validation.</li>
 <li>PMX physics, IK animation playback, toon rendering, and every MMD-specific material feature are not guaranteed in this preview.</li>
-<li>Humanoid mapping includes core body and finger roles. Browser-native VRM export is now wired for testing, but both formats still need independent schema-validator and target-app checks. Expressions, MMD physics conversion, SpringBone authoring, and complete VRM validation remain unfinished.</li>
+<li>Humanoid mapping includes core body and finger roles. Browser-native VRM export is now wired for testing, but both formats still need independent schema-validator and target-app checks. VRM 0.x Secondary Animation can be authored manually; PMX rigid-body physics is not auto-converted. VRM Expression group authoring and complete target-app validation remain unfinished.</li>
 </ul>
 </section>
 <p class="note" style="text-align:center">ASTER PMX2VRM WORKSHOP · Android-first · English UI</p>
@@ -155,6 +180,7 @@ const viewport = $('viewport'), empty = $('empty');
 let renderer, scene, camera, controls, currentModel = null, skeletonHelper = null;
 let textureUrls = [], textureMap = new Map(), showBones = false;
 let sourceBones = [], humanoidMapping = {};
+let secondaryBoneGroups = [], secondaryColliderGroups = [];
 let originalPose = new Map(), poseApplied = false;
 let sourceModelFileName = '';
 let exportBusy = false;
@@ -416,6 +442,8 @@ async function renderPmx(buffer, displayName, sourceSize, zipEntries = []) {
     $('materialCount').textContent = String(materials);
     $('boneCount').textContent = String(model.skeleton ? model.skeleton.bones.length : 0);
     sourceBones = model.skeleton ? model.skeleton.bones : [];
+    secondaryBoneGroups = []; secondaryColliderGroups = [];
+    buildSecondaryEditor();
     buildMappingEditor();
     autoMapBones();
     $('details').textContent = 'PMX data parsed. Core-body and finger Humanoid mapping are available as preparation tools; they do not yet validate skin weights, IK, physics, or VRM compatibility.';
@@ -611,6 +639,40 @@ function updateMetadataSummary() {
 }
 updateMetadataSummary();
 
+function fillBoneSelect(selectId, includeEmpty) {
+  const select = $(selectId);
+  if (!select) return;
+  select.innerHTML = '';
+  if (includeEmpty) { const option = document.createElement('option'); option.value=''; option.textContent='— None —'; select.appendChild(option); }
+  sourceBones.forEach((bone,index) => { const option=document.createElement('option'); option.value=String(index); option.textContent=(bone.name || 'Bone '+index)+' (#'+index+')'; select.appendChild(option); });
+}
+function buildSecondaryEditor() {
+  fillBoneSelect('secondaryRoot',false); fillBoneSelect('secondaryCenter',true); fillBoneSelect('colliderNode',false);
+  $('addSpringGroup').disabled = !sourceBones.length; $('addCollider').disabled = !sourceBones.length;
+  renderSecondaryLists();
+}
+function renderSecondaryLists() {
+  $('springGroupList').textContent = secondaryBoneGroups.length ? secondaryBoneGroups.map((g,i)=>(i+1)+'. '+g.comment+' — '+g.bones.map(b=>b.name).join(', ')).join(' | ') : 'No Spring Bone groups added.';
+  $('colliderList').textContent = secondaryColliderGroups.length ? secondaryColliderGroups.map((g,i)=>(i+1)+'. '+g.node.name+' — '+g.colliders.length+' sphere(s)').join(' | ') : 'No collider groups added.';
+}
+$('addSpringGroup').addEventListener('click', () => {
+  const root=sourceBones[Number($('secondaryRoot').value)];
+  const center=$('secondaryCenter').value==='' ? null : sourceBones[Number($('secondaryCenter').value)];
+  if (!root) { $('springGroupList').textContent='Choose a valid spring root bone.'; return; }
+  const number=id=>Number($(id).value);
+  const values={stiffiness:number('springStiffness'),gravityPower:number('springGravity'),dragForce:number('springDrag'),hitRadius:number('springHitRadius')};
+  if (!Object.values(values).every(Number.isFinite) || Object.values(values).some(v=>v<0)) { $('springGroupList').textContent='Spring parameters must be valid non-negative numbers.'; return; }
+  secondaryBoneGroups.push({comment:'Spring: '+(root.name || 'Bone'),bones:[root],center,gravityDir:{x:0,y:-1,z:0},...values});
+  renderSecondaryLists();
+});
+$('addCollider').addEventListener('click', () => {
+  const node=sourceBones[Number($('colliderNode').value)], radius=Number($('colliderRadius').value);
+  const offset={x:Number($('colliderX').value),y:Number($('colliderY').value),z:Number($('colliderZ').value)};
+  if (!node || !Number.isFinite(radius) || radius<=0 || !Object.values(offset).every(Number.isFinite)) { $('colliderList').textContent='Choose a valid collider bone, radius and offset.'; return; }
+  let group=secondaryColliderGroups.find(item=>item.node===node);
+  if (!group) { group={node,colliders:[]}; secondaryColliderGroups.push(group); }
+  group.colliders.push({offset,radius}); renderSecondaryLists();
+});
 const REQUIRED_0X = ['hips','spine','chest','neck','head','leftUpperArm','leftLowerArm','leftHand','rightUpperArm','rightLowerArm','rightHand','leftUpperLeg','leftLowerLeg','leftFoot','rightUpperLeg','rightLowerLeg','rightFoot'];
 const REQUIRED_1X = ['hips','spine','head','leftUpperArm','leftLowerArm','leftHand','rightUpperArm','rightLowerArm','rightHand','leftUpperLeg','leftLowerLeg','leftFoot','rightUpperLeg','rightLowerLeg','rightFoot'];
 function getRequiredMissing(required) {
@@ -813,6 +875,7 @@ async function runVrmExport(format) {
       result = await exportVrm0(prepared.wrapper, {
         humanoid:prepared.humanoid, meta,
         materialStyle:materialStyleOptions(),
+        secondaryAnimation:{boneGroups:secondaryBoneGroups.map(group=>({...group,colliderGroups:secondaryColliderGroups.map((_,index)=>index)})),colliderGroups:secondaryColliderGroups},
         thumbnail:thumbFile || undefined
       });
     } else {
