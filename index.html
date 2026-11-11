@@ -59,7 +59,7 @@ ul{padding-left:21px}.done{color:#23633b}
 </section>
 <section class="card" id="mappingCard">
 <h2>3. Humanoid mapping</h2>
-<p class="note">Map the PMX skeleton to standard VRM Humanoid roles. Original PMX bone names remain unchanged. Finger matching supports Japanese full-width numbering and common L/R prefix/suffix conventions. Ambiguous generic Finger01 names are left unmapped rather than guessed.</p>
+<p class="note">Map the PMX skeleton to standard VRM Humanoid roles. Original PMX bone names remain unchanged. Toe bones are optional and are never required for export. Finger matching supports Japanese full-width numbering and common L/R prefix/suffix conventions. Ambiguous generic Finger01 names are left unmapped rather than guessed.</p>
 <div class="map-tools">
 <button id="autoMap" type="button">Auto map bones</button>
 <button id="clearMap" class="secondary" type="button">Clear mapping</button>
@@ -310,6 +310,8 @@ function clearModel() {
     }
   });
   currentModel = null;
+  sourceBones = []; secondaryBoneGroups = []; secondaryColliderGroups = [];
+  buildSecondaryEditor();
   $('applyMaterialStyle').disabled = true;
   $('materialStatus').textContent = 'Load a PMX model to apply MToon or Unlit shading.';
   $('exportVrm0').disabled = true;
