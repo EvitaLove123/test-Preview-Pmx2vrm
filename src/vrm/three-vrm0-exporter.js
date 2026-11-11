@@ -122,6 +122,70 @@ const BLENDSHAPE_PRESETS = new Set([
   'LookLeft', 'LookRight', 'Blink_L', 'Blink_R',
 ]);
 
+function normalizeMorphTargetNames(scene, gltfJson) {
+  const objectsByName = new Map();
+  scene.traverse(object => { if (object?.isMesh && object.name) objectsByName.set(object.name, object); });
+  for (const node of (gltfJson.nodes || [])) {
+    if (!Number.isInteger(node.mesh)) continue;
+    const mesh = gltfJson.meshes?.[node.mesh];
+    if (!mesh) continue;
+    const targetCount = Math.max(0, ...(mesh.primitives || []).map(p => (p.targets || []).length));
+    if (!targetCount) continue;
+    const source = objectsByName.get(node.name);
+    const dictionary = source?.morphTargetDictionary || {};
+    const namesByIndex = new Map();
+    for (const [name, index] of Object.entries(dictionary)) if (typeof name === 'string' && name.trim() && Number.isInteger(index)) namesByIndex.set(index, name.trim());
+    const existing = Array.isArray(mesh.extras?.targetNames) ? mesh.extras.targetNames : [];
+    const targetNames = Array.from({length:targetCount}, (_, index) => {
+      const candidate = existing[index];
+      if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+      return namesByIndex.get(index) || ('MorphTarget_' + (index + 1));
+    });
+    mesh.extras = {...(mesh.extras || {}), targetNames};
+  }
+}
+
+function buildSecondaryAnimation(scene, gltfJson, input = {}) {
+  const boneInput = Array.isArray(input.boneGroups) ? input.boneGroups : [];
+  const colliderInput = Array.isArray(input.colliderGroups) ? input.colliderGroups : [];
+  const nodeByName = new Map(), nameCounts = new Map();
+  scene.traverse(object => { if (object.name) nameCounts.set(object.name, (nameCounts.get(object.name) || 0) + 1); });
+  (gltfJson.nodes || []).forEach((node, index) => {
+    if (node.name) { const a = nodeByName.get(node.name) || []; a.push(index); nodeByName.set(node.name, a); }
+  });
+  const nodeIndex = (object, label) => {
+    if (!object?.name || nameCounts.get(object.name) !== 1) throw new Error(label + ' must reference a uniquely named exported bone.');
+    const matches = nodeByName.get(object.name) || [];
+    if (matches.length !== 1) throw new Error(label + ' was not exported uniquely: ' + object.name);
+    return matches[0];
+  };
+  const colliderGroups = colliderInput.map((group, i) => {
+    if (!Array.isArray(group.colliders) || !group.colliders.length) throw new Error('Collider group #' + (i+1) + ' needs at least one sphere.');
+    return {node:nodeIndex(group.node, 'Collider group #' + (i+1)),colliders:group.colliders.map((collider, j) => {
+      const radius = Number(collider.radius), o = collider.offset || {};
+      const offset = {x:Number(o.x ?? 0),y:Number(o.y ?? 0),z:Number(o.z ?? 0)};
+      if (!Number.isFinite(radius) || radius <= 0 || !Object.values(offset).every(Number.isFinite)) throw new Error('Invalid collider sphere in group #' + (i+1) + ', item #' + (j+1) + '.');
+      return {offset,radius};
+    })};
+  });
+  const boneGroups = boneInput.map((group, i) => {
+    if (!Array.isArray(group.bones) || !group.bones.length) throw new Error('Spring group #' + (i+1) + ' needs at least one root bone.');
+    const result = {
+      comment:String(group.comment || 'Spring group ' + (i+1)),
+      stiffiness:Number(group.stiffiness ?? 1), gravityPower:Number(group.gravityPower ?? 0.5),
+      gravityDir:{x:Number(group.gravityDir?.x ?? 0),y:Number(group.gravityDir?.y ?? -1),z:Number(group.gravityDir?.z ?? 0)},
+      dragForce:Number(group.dragForce ?? 0.4), hitRadius:Number(group.hitRadius ?? 0.02),
+      bones:group.bones.map((bone, j) => nodeIndex(bone, 'Spring root #' + (j+1))),
+      colliderGroups:Array.isArray(group.colliderGroups) ? group.colliderGroups.filter(x => Number.isInteger(x) && x >= 0 && x < colliderGroups.length) : colliderGroups.map((_, j) => j)
+    };
+    if (group.center) result.center = nodeIndex(group.center, 'Spring center');
+    for (const key of ['stiffiness','gravityPower','dragForce','hitRadius']) if (!Number.isFinite(result[key]) || result[key] < 0) throw new Error('Spring group #' + (i+1) + ' has invalid ' + key + '.');
+    if (!Object.values(result.gravityDir).every(Number.isFinite)) throw new Error('Spring group #' + (i+1) + ' has invalid gravity direction.');
+    return result;
+  });
+  return {boneGroups,colliderGroups};
+}
+
 function buildBlendShapeMaster(groups, scene, gltfJson) {
   if (groups == null) return undefined;
   if (!Array.isArray(groups)) throw new TypeError('blendShapeGroups must be an array.');
@@ -361,6 +425,7 @@ function mapNodes(scene, gltfJson, mapping) {
  * @param {object} [options.firstPerson] Optional first-person settings.
  * @param {Array<object>} [options.blendShapeGroups] Groups with binds { mesh: Three.js Mesh, target: morph name or index, weight }.
  * @param {Blob|{data:ArrayBuffer,mimeType:string}} [options.thumbnail] PNG/JPEG thumbnail to embed in the GLB.
+ * @param {object} [options.secondaryAnimation] VRM 0.x boneGroups and colliderGroups using Three.js Bone references.
  *  */
 export async function exportVrm0(scene, options = {}) {
   if (!scene || typeof scene.traverse !== 'function') {
@@ -382,6 +447,7 @@ export async function exportVrm0(scene, options = {}) {
   }
 
   const { json, chunks } = readGlb(baseGlb);
+  normalizeMorphTargetNames(scene, json);
   const thumbnailTextureIndex = await embedThumbnail(json, chunks, options.thumbnail);
   if (thumbnailTextureIndex !== null) meta.texture = thumbnailTextureIndex;
   else if (meta.texture !== undefined && meta.texture >= (json.textures || []).length) {
@@ -411,6 +477,7 @@ export async function exportVrm0(scene, options = {}) {
 
   const blendShapeMaster = buildBlendShapeMaster(options.blendShapeGroups, scene, json);
   const materialProperties = buildMaterialProperties(json, options.materialStyle);
+  const secondaryAnimation = buildSecondaryAnimation(scene, json, options.secondaryAnimation);
 
   const vrm = {
     specVersion: '0.0',
@@ -429,7 +496,7 @@ export async function exportVrm0(scene, options = {}) {
     },
     firstPerson,
     materialProperties,
-    secondaryAnimation: { boneGroups: [], colliderGroups: [] },
+    secondaryAnimation,
   };
   if (blendShapeMaster) vrm.blendShapeMaster = blendShapeMaster;
 
@@ -456,8 +523,10 @@ export async function exportVrm0(scene, options = {}) {
       extensions: json.extensionsUsed,
       humanoidBones: humanoid.humanBones.length,
       blendShapeGroups: blendShapeMaster?.blendShapeGroups.length || 0,
+      springBoneGroups: secondaryAnimation.boneGroups.length,
+      colliderGroups: secondaryAnimation.colliderGroups.length,
       thumbnailTextureIndex,
-      note: 'VRM 0.x metadata, humanoid, first-person, materialProperties (MToon or Unlit), and an empty secondaryAnimation container are serialized. Spring bone groups and collider groups are not yet generated.',
+      note: 'VRM 0.x metadata, humanoid, first-person, materialProperties, normalized morph target names, and configured Secondary Animation are serialized. Spring roots and collider spheres are included only when selected in the editor.',
     },
   };
 }
