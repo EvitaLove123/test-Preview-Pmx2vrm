@@ -458,7 +458,7 @@ const humanoidSlots = [
   )
 ];
 const boneAliases = {
-  hips:['hips','pelvis','root','センター','下半身','腰','骨盤','bip001pelvis','bip01pelvis'],
+  hips:['下半身','腰','骨盤','hips','pelvis','bip001pelvis','bip01pelvis'],
   spine:['spine','上半身','胴体','胸下','bip001spine','bip01spine'],
   chest:['chest','上半身2','上半身３','胸','胸上','bip001spine1','bip01spine1'],
   neck:['neck','首','bip001neck','bip01neck'],
@@ -557,6 +557,13 @@ function scoreBoneForSlot(boneName, slot) {
   const original = String(boneName || '');
   const name = compactBoneName(original);
   let best = 0;
+  // MMD: do not map the motion/root center (センター) as VRM Hips.
+  // Prefer the actual lower-body/pelvis joint in the deforming torso/leg chain.
+  if (slot === 'hips') {
+    if (original === '下半身') return 150;
+    if (original === '腰' || original === '骨盤') return 140;
+    if (original === 'センター' || name === 'center' || name === 'センター') return 0;
+  }
   for (const aliasRaw of getSlotAliases(slot)) {
     const alias = compactBoneName(aliasRaw);
     if (!alias) continue;
