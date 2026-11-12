@@ -501,7 +501,7 @@ export async function exportVrm0(scene, options = {}) {
 
   const vrm = {
     specVersion: '0.0',
-    exporterVersion: 'Aster PMX2VRM Browser',
+    exporterVersion: 'VRM-exporter',
     meta,
     humanoid: {
       humanBones: humanoid.humanBones,
