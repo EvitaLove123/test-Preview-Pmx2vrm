@@ -399,6 +399,45 @@ async function embedThumbnail(json, chunks, thumbnail) {
   return textureIndex;
 }
 
+// Ensure each glTF skin.skeleton points to a valid common ancestor of every joint.
+// Some PMX armatures include multiple top-level joint branches (for example, an
+// operation-center dummy beside the actual skeleton root). GLTFExporter may
+// otherwise select the first joint as skeleton even when it is not an ancestor
+// of the other joints, which strict readers can reject.
+function normalizeSkinSkeletonRoots(gltfJson) {
+  const nodes = Array.isArray(gltfJson.nodes) ? gltfJson.nodes : [];
+  const parentByNode = new Map();
+  nodes.forEach((node, parentIndex) => {
+    for (const childIndex of node.children || []) {
+      if (!Number.isInteger(childIndex) || childIndex < 0 || childIndex >= nodes.length) continue;
+      if (!parentByNode.has(childIndex)) parentByNode.set(childIndex, parentIndex);
+    }
+  });
+
+  for (const [skinIndex, skin] of (gltfJson.skins || []).entries()) {
+    const joints = Array.isArray(skin.joints) ? skin.joints : [];
+    if (!joints.length) throw new Error('Skin #' + skinIndex + ' has no joints.');
+    const ancestorChain = (nodeIndex) => {
+      const chain = [];
+      const seen = new Set();
+      let current = nodeIndex;
+      while (Number.isInteger(current) && current >= 0 && current < nodes.length && !seen.has(current)) {
+        chain.push(current);
+        seen.add(current);
+        current = parentByNode.get(current);
+      }
+      return chain;
+    };
+    const chains = joints.map(ancestorChain);
+    const commonAncestors = chains.slice(1).map(chain => new Set(chain));
+    const commonRoot = chains[0].find(candidate => commonAncestors.every(set => set.has(candidate)));
+    if (!Number.isInteger(commonRoot)) {
+      throw new Error('Skin #' + skinIndex + ' joints do not share a common node ancestor.');
+    }
+    skin.skeleton = commonRoot;
+  }
+}
+
 function mapNodes(scene, gltfJson, mapping) {
   if (!mapping || typeof mapping !== 'object') throw new Error('Humanoid mapping is required.');
 
