@@ -910,7 +910,7 @@ $('downloadGlb').addEventListener('click', async () => {
       obj.material = Array.isArray(obj.material) ? obj.material.map(convert) : convert(obj.material || {});
     });
     const exportScene = new THREE.Group();
-    exportScene.name = 'Aster_GL B_Preview'.replace(/\s+/g, '');
+    exportScene.name = 'Root';
     exportScene.add(exportRoot);
     exportScene.updateMatrixWorld(true);
     $('glbStatus').textContent = 'Converting model and textures to GLB…';
