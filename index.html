@@ -236,6 +236,15 @@ function setStatus(message, kind='') {
   state.textContent = message;
   state.className = 'status' + (kind ? ' ' + kind : '');
 }
+function renamePmxMeshes(root) {
+  const base = (sourceModelFileName || 'Model').replace(/\\.pmx$/i, '').trim() || 'Model';
+  let index = 0;
+  root.traverse(obj => {
+    if (!obj.isMesh) return;
+    index++;
+    obj.name = index === 1 ? base + '.pmx' : base + '.pmx_' + index;
+  });
+}
 function initViewer() {
   if (renderer) return;
   scene = new THREE.Scene();
@@ -407,7 +416,8 @@ async function renderPmx(buffer, displayName, sourceSize, zipEntries = []) {
     if (modelBounds.isEmpty()) throw new Error('The PMX model has no measurable geometry bounds.');
     const modelCenter = modelBounds.getCenter(new THREE.Vector3());
     const previewRoot = new THREE.Group();
-    previewRoot.name = 'PMX_Preview_Centering';
+    previewRoot.name = 'Root';
+    model.name = sourceModelFileName + '.pmx';
     previewRoot.add(model);
     previewRoot.position.set(-modelCenter.x, -modelBounds.min.y, -modelCenter.z);
     currentModel = previewRoot;
@@ -756,6 +766,7 @@ function prepareExportRoot() {
   const pmxRoot = currentModel.children.find(child => child !== skeletonHelper && !child.isSkeletonHelper);
   if (!pmxRoot) throw new Error('Could not find the PMX model node inside the preview.');
   const root = cloneSkeleton(pmxRoot);
+  renamePmxMeshes(root);
   root.position.copy(currentModel.position);
   root.quaternion.copy(currentModel.quaternion);
   root.scale.copy(currentModel.scale);
@@ -780,7 +791,7 @@ function prepareExportRoot() {
     obj.material = Array.isArray(obj.material) ? obj.material.map(convert) : convert(obj.material || {});
   });
   const wrapper = new THREE.Group();
-  wrapper.name = 'RootModel';
+  wrapper.name = 'Root';
   wrapper.add(root);
   // GLTF node names must be unambiguous for both VRM serializers.
   const nameCounts = new Map();
@@ -871,6 +882,7 @@ $('downloadGlb').addEventListener('click', async () => {
     const pmxRoot = currentModel.children.find(child => child !== skeletonHelper && !child.isSkeletonHelper);
     if (!pmxRoot) throw new Error('Could not find the PMX model node inside the preview.');
     exportRoot = cloneSkeleton(pmxRoot);
+    renamePmxMeshes(exportRoot);
     exportRoot.position.copy(currentModel.position);
     exportRoot.quaternion.copy(currentModel.quaternion);
     exportRoot.scale.copy(currentModel.scale);
