@@ -237,7 +237,7 @@ function setStatus(message, kind='') {
   state.className = 'status' + (kind ? ' ' + kind : '');
 }
 function renamePmxMeshes(root) {
-  const base = (sourceModelFileName || 'Model').replace(/\\.pmx$/i, '').trim() || 'Model';
+  const base = (sourceModelFileName || 'Model').replace(/\.pmx$/i, '').trim() || 'Model';
   let index = 0;
   root.traverse(obj => {
     if (!obj.isMesh) return;
