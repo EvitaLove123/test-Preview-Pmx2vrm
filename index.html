@@ -766,11 +766,11 @@ function prepareExportRoot() {
   const pmxRoot = currentModel.children.find(child => child !== skeletonHelper && !child.isSkeletonHelper);
   if (!pmxRoot) throw new Error('Could not find the PMX model node inside the preview.');
   const root = cloneSkeleton(pmxRoot);
-  renamePmxMeshes(root);
   root.position.copy(currentModel.position);
   root.quaternion.copy(currentModel.quaternion);
   root.scale.copy(currentModel.scale);
   root.name = $('metaName').value.trim() || sourceModelFileName || 'Aster_Model';
+  renamePmxMeshes(root);
   root.traverse(obj => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
@@ -882,11 +882,11 @@ $('downloadGlb').addEventListener('click', async () => {
     const pmxRoot = currentModel.children.find(child => child !== skeletonHelper && !child.isSkeletonHelper);
     if (!pmxRoot) throw new Error('Could not find the PMX model node inside the preview.');
     exportRoot = cloneSkeleton(pmxRoot);
-    renamePmxMeshes(exportRoot);
     exportRoot.position.copy(currentModel.position);
     exportRoot.quaternion.copy(currentModel.quaternion);
     exportRoot.scale.copy(currentModel.scale);
     exportRoot.name = $('metaName').value.trim() || sourceModelFileName || 'Aster_Model';
+    renamePmxMeshes(exportRoot);
     exportRoot.traverse(obj => {
       if (!obj.isMesh) return;
       obj.frustumCulled = false;
