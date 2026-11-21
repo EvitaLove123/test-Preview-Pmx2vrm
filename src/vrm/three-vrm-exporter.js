@@ -254,7 +254,7 @@ export async function exportVrm10(scene, options = {}) {
   if (!(baseGlb instanceof ArrayBuffer)) throw new Error('GLTFExporter did not return binary GLB data.');
   const { json, chunks } = readGlb(baseGlb);
   json.asset = json.asset || {};
-  json.asset.generator = 'VRM-exporter';
+  json.asset.generator = 'Root';
   applyMaterialStyle(json, options.materialStyle);
   const humanoid = resolveHumanoidNodes(scene, json, options.humanoid);
 
