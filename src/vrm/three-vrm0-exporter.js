@@ -505,6 +505,8 @@ export async function exportVrm0(scene, options = {}) {
   }
 
   const { json, chunks } = readGlb(baseGlb);
+  json.asset = json.asset || {};
+  json.asset.generator = 'Root';
   const secondaryNodeIndex = ensureSecondaryRootNode(json);
   normalizeMorphTargetNames(scene, json);
   const thumbnailTextureIndex = await embedThumbnail(json, chunks, options.thumbnail);
@@ -540,7 +542,7 @@ export async function exportVrm0(scene, options = {}) {
 
   const vrm = {
     specVersion: '0.0',
-    exporterVersion: 'VRM-exporter',
+    exporterVersion: 'Root',
     meta,
     humanoid: {
       humanBones: humanoid.humanBones,
